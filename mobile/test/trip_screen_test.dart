@@ -6,7 +6,6 @@ import 'package:gosafe/engine/safe_phrase.dart';
 import 'package:gosafe/engine/safety_engine.dart';
 import 'package:gosafe/engine/scenarios.dart';
 import 'package:gosafe/features/safety/are_you_ok.dart';
-import 'package:gosafe/features/trip/gojek_ui.dart';
 import 'package:gosafe/features/trip/trip_screen.dart';
 import 'package:gosafe/services/api.dart';
 import 'package:gosafe/services/recorder.dart';
@@ -44,8 +43,6 @@ class FakeApi extends Api {
 
   @override
   Future<void> setSafeRide(bool on) async => calls.add('safeRide:$on');
-  @override
-  Future<void> setEmail(String email) async => calls.add('email:$email');
   @override
   Future<void> endTrip(String tripId) async => calls.add('end:$tripId');
   @override
@@ -187,8 +184,7 @@ class Harness {
 
 /// The ride screen is a sheet over a map: scroll a button into view before tapping it.
 Future<void> tapIn(WidgetTester tester, Finder finder) async {
-  await tester
-      .pumpAndSettle(); // a bottom sheet slides in: tap it where it ends up
+  await tester.pumpAndSettle(); // a bottom sheet slides in: tap it where it ends up
   await tester.ensureVisible(finder);
   await tester.pump();
   await tester.tap(finder);
@@ -485,75 +481,50 @@ void main() {
     },
   );
 
-  testWidgets(
-    'the safe phrase sends a silent high flag, once, and goes live at once',
-    (tester) async {
-      final h = Harness();
-      await h.pump(tester);
-      await h.startRide(tester);
-      await h.say(tester, 'Pak nanti lewat jalan biasa saja ya');
-      await tester.pumpAndSettle();
-
-      final (trigger, evidence) = h.api.reports.single;
-      expect(trigger, 'auto');
-      expect(
-        (evidence!.verdict.label, evidence.verdict.score),
-        (Label.threat, 1.0),
-      );
-      expect(find.text(SafetyText.askTitle), findsNothing, reason: 'silent');
-      expect(
-        h.alerts,
-        isEmpty,
-        reason: 'no notification or alarm the other person could hear',
-      );
-      expect(h.vibrated, 1, reason: 'one short vibration');
-      expect(h.recorder.live, isTrue, reason: 'Live at once, not after 60 s');
-      expect(h.api.saves.last, endsWith(':live:-'));
-      expect(
-        [for (final m in (await h.store.rides()).single.markers) m['kind']],
-        ['high'],
-      );
-      await h.say(tester, 'Pak, nanti lewat jalan biasa aja ya.');
-      expect(h.api.reports, hasLength(1), reason: 'once per ride');
-    },
-  );
-
-  testWidgets(
-    'the safe phrase counts on the high ladder: after two high flags it is an SOS',
-    (tester) async {
-      final h = Harness();
-      await h.pump(tester);
-      await h.startRide(tester);
-      await h.say(tester, harassment);
-      await tapIn(tester, find.text(SafetyText.askOk));
-      await tester.pumpAndSettle();
-      await h.say(
-        tester,
-        harassment,
-      ); // a new offending line: the 2nd high flag
-      await tapIn(tester, find.text(SafetyText.askOk));
-      await tester.pumpAndSettle();
-      expect(h.api.reports.map((r) => r.$1), ['auto', 'auto']);
-
-      await h.say(tester, 'Pak, nanti lewat jalan biasa aja ya.');
-      await tester.pumpAndSettle();
-      expect(h.api.reports.map((r) => r.$1), [
-        'auto',
-        'auto',
-        'sos',
-      ], reason: 'the 3rd high flag');
-      expect(
-        find.text(SafetyText.helpSentTitle),
-        findsNothing,
-        reason: 'still silent',
-      );
-      expect(h.vibrated, 1);
-    },
-  );
-
-  testWidgets('vibration: a warning and an SOS vibrate; a report does not', (
+  testWidgets('the safe phrase sends a silent high flag, once, and goes live at once', (
     tester,
   ) async {
+    final h = Harness();
+    await h.pump(tester);
+    await h.startRide(tester);
+    await h.say(tester, 'Pak nanti lewat jalan biasa saja ya');
+    await tester.pumpAndSettle();
+
+    final (trigger, evidence) = h.api.reports.single;
+    expect(trigger, 'auto');
+    expect((evidence!.verdict.label, evidence.verdict.score), (Label.threat, 1.0));
+    expect(find.text(SafetyText.askTitle), findsNothing, reason: 'silent');
+    expect(h.alerts, isEmpty, reason: 'no notification or alarm the other person could hear');
+    expect(h.vibrated, 1, reason: 'one short vibration');
+    expect(h.recorder.live, isTrue, reason: 'Live at once, not after 60 s');
+    expect(h.api.saves.last, endsWith(':live:-'));
+    expect([for (final m in (await h.store.rides()).single.markers) m['kind']], ['high']);
+    await h.say(tester, 'Pak, nanti lewat jalan biasa aja ya.');
+    expect(h.api.reports, hasLength(1), reason: 'once per ride');
+  });
+
+  testWidgets('the safe phrase counts on the high ladder: after two high flags it is an SOS', (
+    tester,
+  ) async {
+    final h = Harness();
+    await h.pump(tester);
+    await h.startRide(tester);
+    await h.say(tester, harassment);
+    await tapIn(tester, find.text(SafetyText.askOk));
+    await tester.pumpAndSettle();
+    await h.say(tester, harassment); // a new offending line: the 2nd high flag
+    await tapIn(tester, find.text(SafetyText.askOk));
+    await tester.pumpAndSettle();
+    expect(h.api.reports.map((r) => r.$1), ['auto', 'auto']);
+
+    await h.say(tester, 'Pak, nanti lewat jalan biasa aja ya.');
+    await tester.pumpAndSettle();
+    expect(h.api.reports.map((r) => r.$1), ['auto', 'auto', 'sos'], reason: 'the 3rd high flag');
+    expect(find.text(SafetyText.helpSentTitle), findsNothing, reason: 'still silent');
+    expect(h.vibrated, 1);
+  });
+
+  testWidgets('vibration: a warning and an SOS vibrate; a report does not', (tester) async {
     final h = Harness();
     await h.pump(tester);
     await h.startRide(tester);
@@ -627,52 +598,6 @@ void main() {
       expect(h.api.reports.map((r) => r.$1), ['auto']);
     },
   );
-
-  testWidgets(
-    'the email for updates: checked, kept on the phone, sent to the backend with each ride',
-    (tester) async {
-      final h = Harness();
-      await h.pump(tester);
-      final emailCard = find.ancestor(
-        of: find.text(SafetyText.emailTitle),
-        matching: find.byType(GoCard),
-      );
-      await tapIn(
-        tester,
-        find.descendant(of: emailCard, matching: find.text('Set')),
-      );
-      await tester.pumpAndSettle();
-      await tester.enterText(find.byType(TextField), 'rina-at-mail');
-      await tapIn(tester, find.text('Save'));
-      await tester.pumpAndSettle();
-      expect(find.text(SafetyText.emailInvalid), findsOneWidget);
-      expect(await h.store.email(), isNull);
-
-      await tester.enterText(find.byType(TextField), 'rina@example.com');
-      await tapIn(tester, find.text('Save'));
-      await tester.pumpAndSettle();
-      expect(await h.store.email(), 'rina@example.com');
-      expect(find.text(SafetyText.emailSaved), findsOneWidget);
-      expect(h.api.calls, ['email:rina@example.com']);
-
-      await h.startRide(tester);
-      expect(
-        h.api.calls,
-        ['email:rina@example.com', 'start:true', 'email:rina@example.com'],
-        reason: 'a fresh anonymous account each launch: the email goes with every ride',
-      );
-    },
-  );
-
-  testWidgets('a saved email is sent when the ride starts', (tester) async {
-    final h = Harness();
-    await h.store.setEmail('dodi.driver@example.com');
-    await h.pump(tester);
-    await tester.pump();
-    expect(find.text('dodi.driver@example.com'), findsOneWidget);
-    await h.startRide(tester);
-    expect(h.api.calls, ['start:true', 'email:dodi.driver@example.com']);
-  });
 
   testWidgets('a too-short safe phrase is refused', (tester) async {
     final h = Harness();

@@ -48,7 +48,6 @@ export type MarkerKind = "warning" | "high" | "sos" | "manual_unsafe";
 export interface Person {
   displayName: string;
   phone?: string | null;
-  email?: string | null; // typed in the app for anonymous phone accounts (POST /me/email)
 }
 
 /** A moment in the ride recording an agent should check (set by the phone). */

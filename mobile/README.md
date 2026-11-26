@@ -312,13 +312,12 @@ PUT /trips/GR-8FBA186A/recording
 
 The backend refuses a recording with no `high`, `sos` or `manual_unsafe` marker, so this privacy rule also holds if the app has a bug. Agents get links to every piece with `GET /trips/{id}/recording-urls` (logged), and the dashboard joins them to play.
 
-Other calls: `POST /trips` (with `riderConsent`, or `role: driver`), `POST /me/consent` (the driver's Safe Ride switch), `POST /me/email` (the email for updates, sent with every ride) and `POST /trips/{id}/end`. The app reads one thing straight from Firestore: the ride's consents.
+Other calls: `POST /trips` (with `riderConsent`, or `role: driver`), `POST /me/consent` (the driver's Safe Ride switch) and `POST /trips/{id}/end`. The app reads one thing straight from Firestore: the ride's consents.
 
 ## Privacy rules the code follows
 
 - Nothing is recorded unless the consumer said yes **and** the driver has Safe Ride on.
 - No location: no permission, no GPS, no route.
-- **Email for updates** (rider and driver, on the ride screen next to the safe phrase): the sign-in is anonymous, so the person types where the safety team should write (SOS received, the outcome of a report). It's kept encrypted on the phone (`email.enc`) and sent to the backend with every ride (`POST /me/email`). Optional: without it, nobody gets an email.
 - During the ride only high flags and button presses leave the phone, plus the recording itself when the ride is Live (an emergency).
 - A recording leaves the phone only after a report, a high flag or an SOS. Any other ride never leaves the phone.
 - Every ride is kept on the phone for 7 days (as the consent prompt says), in the app's private folder, encrypted piece by piece as it's recorded (the key never leaves the Android Keystore). After 7 days it's deleted, sent or not. The app has no playback or export.
