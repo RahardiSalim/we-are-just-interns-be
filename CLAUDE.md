@@ -3,6 +3,7 @@
 Ride-safety system for GoRide/GoCar: rider and driver phones listen during the trip, transcribe and classify speech on the phone, warn both people or report automatically, and keep SOS / "I feel unsafe" always available. A FastAPI backend runs the incident flow, and a Next.js dashboard lets support agents review escalated cases. Hackathon project.
 
 Read before writing code:
+- [LOCAL_SETUP.md](LOCAL_SETUP.md): run it on your laptop, and the secrets, models and settings that are not in the repo
 - [contracts/ARCHITECTURE.md](contracts/ARCHITECTURE.md): stack, API contract, incident lifecycle, deployment, phases
 - [contracts/firestore-schema.md](contracts/firestore-schema.md): collections, fields, enums
 - [mobile/README.md](mobile/README.md): how the mobile app's logic works (the core of the product)
