@@ -21,8 +21,14 @@ abstract final class SafetyText {
   static const askBody =
       "Something didn't sound right, so we've let our safety team know. "
       'Tap if you need help.';
+  static const askAlertBody =
+      "Something didn't sound right. Tap to tell us you're okay.";
   static const askOk = "I'm okay";
   static const askHelp = 'I need help';
+
+  static const listeningTitle = 'GoSafe is keeping this ride safe';
+  static const listeningBody =
+      'Listening during your ride. Recordings are only shared if something seems wrong.';
 
   static const helpSent =
       "We're on it. Our safety team will contact you right away.";

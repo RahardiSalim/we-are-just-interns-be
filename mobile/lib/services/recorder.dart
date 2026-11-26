@@ -1,10 +1,13 @@
-import 'dart:io' show File;
+import 'dart:io' show Directory, File;
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
+
+import '../features/safety/are_you_ok.dart' show SafetyText;
+import 'ride.dart';
 
 class Recording {
   const Recording(this.read, this.contentType, this.length);
@@ -33,11 +36,21 @@ class MicRecorder implements TripRecorder {
   @override
   Future<bool> start() async {
     if (!await _rec.hasPermission()) return false;
-    // shortcut: a plain temp file, deleted after upload; encrypt it (Android Keystore + AES-GCM)
-    // before keeping audio on the phone for any length of time.
-    final path = _web
-        ? ''
-        : '${(await getTemporaryDirectory()).path}/ride-${DateTime.now().millisecondsSinceEpoch}.m4a';
+    var path = '';
+    if (!_web) {
+      final dir = await getApplicationSupportDirectory(); // app-private, never in backups or the gallery
+      // The last ride's encrypted file has been uploaded (or wasn't needed) by now.
+      // shortcut: a failed upload is lost here too; keep it and retry once uploads can fail in the field.
+      for (final f in Directory(dir.path).listSync().whereType<File>()) {
+        if (f.path.contains('/ride-')) f.deleteSync();
+      }
+      path = '${dir.path}/ride-${DateTime.now().millisecondsSinceEpoch}.m4a';
+      // Before the mic starts: Android only lets a foreground service keep it on in the background.
+      await Ride.startListening(
+        SafetyText.listeningTitle,
+        SafetyText.listeningBody,
+      );
+    }
     await _rec.start(
       RecordConfig(
         encoder: _web ? AudioEncoder.wav : AudioEncoder.aacLc,
@@ -54,11 +67,14 @@ class MicRecorder implements TripRecorder {
   @override
   Future<Recording?> stop() async {
     final path = await _rec.stop();
+    if (!_web) await Ride.stopListening();
     if (path == null || _startedAt == null) return null;
-    // On the web `path` is a blob URL; on Android it's a file.
+    // On the web `path` is a blob URL. On Android the audio is encrypted the moment recording stops.
+    // shortcut: the file is plain while the ride is on; encrypt in chunks while recording if rides get long.
+    final stored = _web ? path : await Ride.encrypt(path);
     Future<Uint8List> read() async => _web
         ? (await http.get(Uri.parse(path))).bodyBytes
-        : File(path).readAsBytes();
+        : Ride.decrypt(stored);
     return Recording(
       read,
       _web ? 'audio/wav' : 'audio/mp4',
@@ -67,5 +83,8 @@ class MicRecorder implements TripRecorder {
   }
 
   @override
-  Future<void> discard() => _rec.cancel(); // record's cancel() stops and deletes the file
+  Future<void> discard() async {
+    await _rec.cancel(); // record's cancel() stops and deletes the file
+    if (!_web) await Ride.stopListening();
+  }
 }
