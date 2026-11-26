@@ -19,6 +19,9 @@ abstract interface class TripRecorder {
 
   /// Stops and saves the last piece. Returns how long it recorded.
   Future<Duration> stop();
+
+  /// Live: save a piece every 10 seconds instead of 30, so an agent hears it sooner.
+  void goLive();
 }
 
 class MicRecorder implements TripRecorder {
@@ -27,6 +30,7 @@ class MicRecorder implements TripRecorder {
   final RideStore store;
   final _rec = AudioRecorder();
   static const _piece = Duration(seconds: 30);
+  static const _livePiece = Duration(seconds: 10);
 
   late String _tripId;
   DateTime? _startedAt;
@@ -91,9 +95,18 @@ class MicRecorder implements TripRecorder {
   }
 
   @override
+  void goLive() {
+    if (kIsWeb || _timer == null) return;
+    _timer!.cancel();
+    _savePiece(); // what's buffered goes out now
+    _timer = Timer.periodic(_livePiece, (_) => _savePiece());
+  }
+
+  @override
   Future<Duration> stop() async {
     final length = DateTime.now().difference(_startedAt ?? DateTime.now());
     _timer?.cancel();
+    _timer = null;
     final path = await _rec.stop();
     if (kIsWeb) {
       if (path != null) {

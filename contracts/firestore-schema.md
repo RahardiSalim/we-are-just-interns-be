@@ -24,25 +24,26 @@ Read by: owner, agents.
 | `mode` | `goride` \| `gocar` |
 | `status` | `active` \| `ended` |
 | `consent` | `{ rider: bool, driver: bool }`: rider from the consent prompt, driver from their Safe Ride setting (`users.audioConsent`) |
-| `recording` | only after a ride with a high flag or SOS; see below |
+| `recordings` | `{ rider?, driver? }`: each phone's recording, only after a report, a high flag or an SOS; see below |
 | `startedAt`, `endedAt` | timestamp |
 
 Read by: rider, driver, agents.
 
-### `trips/{tripId}.recording`
+### `trips/{tripId}.recordings.{rider|driver}`
 
-One per ride, however many incidents the ride has. Every incident of the ride reaches it through `incidents.tripId`.
+One per phone, however many incidents the ride has. Every incident of the ride reaches it through `incidents.tripId`. The audio is in numbered pieces at `recordings/{tripId}/{rider|driver}/{n:06}.{aac|m4a|ogg|wav}`; ADTS pieces join byte for byte.
 
 | Field | Type |
 |---|---|
-| `path` | object key of the audio, `recordings/{tripId}.aac` (or `.m4a` / `.ogg` / `.wav`) |
+| `pieces` | number of audio pieces uploaded so far (numbered from 0) |
+| `live` | bool: the phone is streaming (emergency) |
 | `contentType` | `audio/aac` (ADTS, what the phone records) \| `audio/mp4` \| `audio/ogg` \| `audio/wav` |
 | `durationSec` | number |
 | `markers` | `[ { at, kind: warning \| high \| sos \| manual_unsafe, label, score, text } ]`: the phone's flags, `at` in seconds from the start of the recording |
 | `transcript` | `[ { at, end, text } ]`: the phone's speech-to-text for the whole ride, seconds from the start |
-| `status` | `awaiting_upload` \| `uploaded` |
+| `status` | `uploading` \| `live` \| `uploaded` |
 | `uploadedBy` | uid |
-| `createdAt`, `uploadedAt` | timestamp |
+| `updatedAt` | timestamp |
 | `review` | written after upload: `{ source: sahabat-ai \| gemini \| rules, model, summary, label, confidence, moments: [ { at, label, reason } ], note, createdAt }`. Phone numbers are masked; every `moments.at` is a real transcript line |
 
 ## trips/{tripId}/events/{eventId}
@@ -61,9 +62,11 @@ Read by: agents.
 |---|---|
 | `tripId` | string |
 | `reportedBy` | uid |
-| `trigger` | `sos` \| `manual_unsafe` \| `auto` (the phone's classifier hit the high threshold) |
+| `trigger` | `sos` \| `manual_unsafe` (a report) \| `auto` (the phone's classifier hit the high threshold). The most urgent of all `reports` |
+| `reports` | `[ { trigger, by, label, score, at } ]`: every report that joined this case, from either phone (one case per ride) |
+| `live` | bool: a phone of this ride is streaming right now |
 | `windowStart`, `windowEnd` | timestamp (the audio window the reporter flagged) |
-| `status` | `awaiting_upload` \| `processing` \| `failed` \| `dismissed` \| `checkin_pending` \| `resolved_ok` \| `escalated` \| `under_review` \| `closed` |
+| `status` | `awaiting_upload` \| `processing` \| `failed` \| `escalated` \| `under_review` \| `closed` |
 | `severity` | `low` \| `medium` \| `high` |
 | `label` | `normal` \| `uncomfortable` \| `sexual_harassment` \| `threat` |
 | `score` | number 0–1 |
@@ -77,18 +80,6 @@ Read by: agents.
 | `error` | string, only when `status` is `failed` |
 
 Read by: reporter (own, limited fields), agents.
-
-## checkins/{checkinId}
-
-| Field | Type |
-|---|---|
-| `incidentId` | string |
-| `userId` | uid |
-| `status` | `sent` \| `ok` \| `need_help` \| `no_reply` |
-| `required` | bool: false for a GoRide driver, whose silence never escalates |
-| `sentAt`, `repliedAt` | timestamp |
-
-Read by: that user, agents.
 
 ## auditLogs/{logId}
 

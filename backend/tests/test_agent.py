@@ -32,10 +32,10 @@ def test_agent_opens_listens_and_decides(client, login, db):
     assert client.post(f"/incidents/{incident_id}/decision", json={"action": "dismiss"}).status_code == 409
 
 
-def test_cases_still_in_check_in_cannot_be_opened(client, login, db):
+def test_a_report_goes_straight_to_an_agent(client, login, db):
     incident_id = report(client, start_trip(client, login), trigger="manual_unsafe")
     login("agent1")
-    assert client.post(f"/incidents/{incident_id}/open").status_code == 409
+    assert client.post(f"/incidents/{incident_id}/open").status_code == 200
 
 
 def test_no_clip_means_404_and_no_audit_entry(client, login, db):

@@ -20,16 +20,16 @@ MARKERS = [
 def ride_with_recording(client, login, order="GR-3001"):
     login("rider1")
     client.post("/trips", json={"orderId": order, "riderConsent": True})
-    body = {"durationSec": 30.6, "contentType": "audio/mp4", "markers": MARKERS, "transcript": TRANSCRIPT}
-    assert client.post(f"/trips/{order}/recording", json=body).status_code == 200
-    assert client.post(f"/trips/{order}/recording/done").status_code == 200
+    body = {"durationSec": 30.6, "contentType": "audio/aac", "markers": MARKERS, "transcript": TRANSCRIPT,
+            "pieces": 1, "done": True}
+    assert client.put(f"/trips/{order}/recording", json=body).status_code == 200
     return db_review(order)
 
 
 def db_review(order):
     from app.core.firebase import db
 
-    return db().document("trips", order).get().to_dict()["recording"].get("review")
+    return db().document("trips", order).get().to_dict()["recordings"]["rider"].get("review")
 
 
 def test_without_a_model_the_rules_review_the_whole_ride(client, login, db):

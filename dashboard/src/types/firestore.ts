@@ -6,8 +6,6 @@ export type IncidentStatus =
   | "processing"
   | "failed"
   | "dismissed"
-  | "checkin_pending"
-  | "resolved_ok"
   | "escalated"
   | "under_review"
   | "closed";
@@ -35,6 +33,10 @@ export interface Incident {
   summary: string | null;
   clipPath: string | null;
   source: "device" | "cloud";
+  /** A phone is streaming this ride to the agent right now (emergency). */
+  live?: boolean;
+  /** Every report that joined this case: one case per ride, from either phone. */
+  reports?: { trigger: Incident["trigger"]; by: string; label: Label | null; score: number | null }[];
   assignedAgent: string | null;
   createdAt: Timestamp;
   deleteAt: Timestamp;
@@ -69,15 +71,19 @@ export interface Review {
   note: string | null;
 }
 
+/** One phone's recording of the ride, uploaded in numbered audio pieces. */
 export interface Recording {
-  path: string;
   contentType: string;
   durationSec: number;
   markers: Marker[];
   transcript: Utterance[];
-  status: "awaiting_upload" | "uploaded";
-  review?: Review;
+  pieces: number;
+  live: boolean;
+  status: "uploading" | "live" | "uploaded";
+  review?: Review | null;
 }
+
+export type Phone = "rider" | "driver";
 
 export interface Trip {
   id: string;
@@ -86,5 +92,5 @@ export interface Trip {
   mode: "goride" | "gocar";
   status: "active" | "ended";
   consent: { rider: boolean; driver: boolean };
-  recording?: Recording;
+  recordings?: Partial<Record<Phone, Recording>>;
 }

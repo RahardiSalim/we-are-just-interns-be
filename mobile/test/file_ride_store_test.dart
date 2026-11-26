@@ -23,11 +23,13 @@ void main() {
   });
   tearDown(() => root.deleteSync(recursive: true));
 
-  test('pieces come back joined in order, past 10 pieces too', () async {
-    for (final i in [10, 2, 0, 1]) {
-      await store.addPiece('GR-1', i, Uint8List.fromList([i]));
+  test('pieces are counted and read back by number', () async {
+    for (final i in [0, 1, 2]) {
+      await store.addPiece('GR-1', i, Uint8List.fromList([i, 9]));
     }
-    expect(await store.audio('GR-1'), [0, 1, 2, 10]);
+    expect(await store.pieceCount('GR-1'), 3);
+    expect(await store.piece('GR-1', 2), [2, 9]);
+    expect(await store.pieceCount('GR-NONE'), 0);
   });
 
   test('details round-trip, and a ride is deleted with its folder', () async {
@@ -35,6 +37,9 @@ void main() {
       tripId: 'GR-1',
       startedAt: DateTime.utc(2026, 11, 26, 9),
       contentType: 'audio/aac',
+      role: 'driver',
+      share: Share.live,
+      piecesSent: 4,
       markers: [
         {'at': 3.5, 'kind': 'high', 'label': 'threat', 'score': 0.9},
       ],
@@ -45,7 +50,7 @@ void main() {
     await store.save(meta);
     final back = (await store.rides()).single;
     expect(back.toJson(), meta.toJson());
-    expect(back.flagged, isTrue);
+    expect((back.role, back.share, back.piecesSent), ('driver', Share.live, 4));
 
     await store.delete('GR-1');
     expect(await store.rides(), isEmpty);

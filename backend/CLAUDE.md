@@ -1,6 +1,6 @@
 # backend
 
-FastAPI service on Cloud Run. Owns every write to Firestore and Storage, signs upload/read URLs, takes the phone's transcript and label → severity → check-in/escalation, sends FCM pushes, and emails the reporter after an SOS and the rider and driver after a decision (`services/mailer.py`). Speech-to-text and the classifier run on the phones, not here.
+FastAPI service on Cloud Run. Owns every write to Firestore and Storage, signs upload/read URLs, takes the phone's transcript and label → severity → escalation (one case per ride; no check-ins), receives each phone's recording in pieces (live during an emergency), sends FCM pushes, and emails the reporter after an SOS and the rider and driver after a decision (`services/mailer.py`). Speech-to-text and the classifier run on the phones, not here.
 
 Follow the root [CLAUDE.md](../CLAUDE.md) rules and [contracts/ARCHITECTURE.md](../contracts/ARCHITECTURE.md).
 

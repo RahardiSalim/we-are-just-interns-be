@@ -1,5 +1,3 @@
-from google.cloud.firestore_v1.base_query import FieldFilter
-
 from tests.conftest import needs_emulator
 
 pytestmark = needs_emulator
@@ -49,14 +47,26 @@ def test_sos_without_any_transcript_escalates(client, login, db):
     assert incident_id in text
 
 
-def test_unsafe_report_without_transcript_checks_in_on_both(client, login, db):
+def test_a_report_reaches_an_agent_as_medium_and_nobody_else_is_asked(client, login, db):
     incident_id = report(client, start_trip(client, login), trigger="manual_unsafe")
 
-    assert db.document("incidents", incident_id).get().to_dict()["status"] == "checkin_pending"
-    checkins = [c.to_dict() for c in db.collection("checkins").where(filter=FieldFilter("incidentId", "==", incident_id)).get()]
-    assert sorted((c["userId"], c["status"]) for c in checkins) == [("driver1", "sent"), ("rider1", "sent")]
-    assert sorted(uid for uid, _ in db.pushes) == ["driver1", "rider1"]
+    inc = db.document("incidents", incident_id).get().to_dict()
+    assert (inc["status"], inc["severity"]) == ("escalated", "medium")
+    assert db.pushes == [], "the driver is never told about a report"
     assert db.emails == []  # only SOS sends the "ticket created" email
+
+
+def test_one_case_per_ride_and_a_later_sos_makes_it_urgent(client, login, db):
+    trip_id = start_trip(client, login)
+    first = report(client, trip_id, trigger="manual_unsafe")
+    login("driver1")
+    again = client.post("/incidents", json={"tripId": trip_id, "trigger": "sos", **WINDOW}).json()
+    assert again == {"incidentId": first, "merged": True}
+
+    inc = db.document("incidents", first).get().to_dict()
+    assert (inc["trigger"], inc["severity"], inc["status"]) == ("sos", "high", "escalated")
+    assert [(r["trigger"], r["by"]) for r in inc["reports"]] == [("manual_unsafe", "rider1"), ("sos", "driver1")]
+    assert len(db.collection("incidents").get()) == 2, "the seeded case and this ride's one"
 
 
 def test_device_label_is_trusted_over_the_keyword_filter(client, login, db):

@@ -7,13 +7,24 @@ import '../../engine/safety_engine.dart';
 import '../../services/api.dart';
 import '../../services/recorder.dart';
 import '../../services/ride_store.dart';
+import '../../services/ride_sync.dart';
 import '../../theme.dart';
 import '../safety/are_you_ok.dart';
 
 typedef TripInfo = ({bool riderConsent, bool driverConsent});
 
-/// The whole ride: consent, recording, listening, every safety response, and what happens afterwards.
-/// The phone decides (SafetyEngine); the backend only receives reports.
+/// A high flag nobody answers: buzz every [_pulse]; at [_goLiveAt] stream to an agent; at [_alarmAt] the
+/// loud alarm and "shout TOLONG". Quiet first, so the phone doesn't give the rider away.
+const _pulse = Duration(seconds: 10);
+const _goLiveAt = Duration(seconds: 60);
+const _alarmAt = Duration(seconds: 120);
+
+/// Shouted for help while the alarm rings after an unanswered high flag. Only listened for then,
+/// so "tolong belok kiri" in normal talk does nothing.
+const _helpWords = [SafePhrase('tolong'), SafePhrase('help')];
+
+/// The whole ride, on the rider's or the driver's phone: consent, recording, listening, every safety
+/// response, and what leaves the phone and when ([Share]). The phone decides; the backend receives.
 class TripScreen extends StatefulWidget {
   const TripScreen({
     super.key,
@@ -22,7 +33,6 @@ class TripScreen extends StatefulWidget {
     required this.store,
     required this.listen,
     required this.tripInfo,
-    required this.checkins,
     this.engine,
     this.alert,
     this.clearAlert,
@@ -41,21 +51,18 @@ class TripScreen extends StatefulWidget {
 
   /// Both consents as the backend stored them for the trip.
   final Future<TripInfo?> Function(String tripId) tripInfo;
-
-  /// IDs of this user's unanswered backend check-ins (after an "I feel unsafe" press).
-  final Stream<List<String>> checkins;
   final SafetyEngine Function()? engine;
 
-  /// A phone notification that reaches the user even with the screen off. `loud`: a repeating
-  /// alarm, for a high flag. Null on the web preview.
+  /// A notification that reaches the user with the screen off. Not `loud`: vibration only, silent.
+  /// `loud`: the alarm sound, repeating until answered. Null on the web preview.
   final Future<void> Function({required bool loud})? alert;
   final Future<void> Function()? clearAlert;
 
   /// Opens the phone's dialer with a number (no call is placed without the user). Null on the web.
   final Future<void> Function(String number)? dial;
 
-  /// The rider's hands-free SOS: hearing it sends a silent SOS (no dialog, no alarm the driver
-  /// could notice). Null turns it off.
+  /// The hands-free SOS: hearing it sends a silent SOS (no dialog, no alarm the other person could
+  /// notice). Null turns it off.
   final SafePhrase? safePhrase;
 
   @override
@@ -63,6 +70,9 @@ class TripScreen extends StatefulWidget {
 }
 
 class _TripScreenState extends State<TripScreen> {
+  // shortcut: the rider/driver switch is for the demo; in production they're two apps.
+  String _role = 'rider';
+  bool _safeRide = true; // the driver's setting: record my rides
   String? _tripId;
   bool _recording = false;
   bool? _driverSafeRide;
@@ -71,19 +81,25 @@ class _TripScreenState extends State<TripScreen> {
   bool _warning = false;
   bool _sosOffline = false;
   bool _safePhraseUsed = false;
+  bool _asking = false; // "Are you okay?" is open
+  bool _shout = false; // the alarm rings: listening for "tolong"
+  bool _live = false;
   String? _notice;
   String? _message;
   final _heard = <(Duration, String)>[];
   RideMeta? _ride; // null when this ride isn't recorded
   Future<void> _saving = Future.value();
   Future<Set<String>> _uploads = Future.value({});
+  Future<void> _streaming = Future.value();
   Timer? _retry;
+  Timer? _highCheck;
+  Timer? _liveTimer;
   DateTime? _rideStart;
   Decision? _last;
   late SafetyEngine _engine;
   StreamSubscription<String>? _listening;
-  StreamSubscription<List<String>>? _checkinSub;
-  final _answered = <String>{};
+
+  bool get _driver => _role == 'driver';
 
   @override
   void initState() {
@@ -91,7 +107,6 @@ class _TripScreenState extends State<TripScreen> {
     widget.api.health().then(
       (up) => mounted ? setState(() => _backendUp = up) : null,
     );
-    _checkinSub = widget.checkins.listen(_onCheckins);
     // Recordings that couldn't be sent (no signal, app closed mid-ride) go out once they can.
     _sendRecordings();
     _retry = Timer.periodic(
@@ -103,8 +118,9 @@ class _TripScreenState extends State<TripScreen> {
   @override
   void dispose() {
     _listening?.cancel();
-    _checkinSub?.cancel();
     _retry?.cancel();
+    _highCheck?.cancel();
+    _liveTimer?.cancel();
     super.dispose();
   }
 
@@ -124,19 +140,33 @@ class _TripScreenState extends State<TripScreen> {
       : DateTime.now().difference(_rideStart!);
 
   Future<void> _startRide() async {
-    final consent = await askConsent(context);
+    // The rider is asked now. The driver chose earlier: their Safe Ride setting.
+    final consent = _driver || await askConsent(context);
     setState(() => _busy = true);
     await _guard(() async {
-      final tripId = await widget.api.startTrip(riderConsent: consent);
+      final String tripId;
+      if (_driver) {
+        await widget.api.setSafeRide(_safeRide);
+        try {
+          tripId = await widget.api.startTrip(role: 'driver');
+        } on ApiException catch (e) {
+          if (e.status != 404) rethrow;
+          setState(() => _notice = SafetyText.noRideWaiting);
+          return;
+        }
+      } else {
+        tripId = await widget.api.startTrip(riderConsent: consent);
+      }
       final trip = await widget.tripInfo(tripId);
       final both = trip != null && trip.riderConsent && trip.driverConsent;
-      // Nothing is recorded unless the rider agreed now and the driver opted in beforehand.
+      // Nothing is recorded unless the rider agreed and the driver has Safe Ride on.
       final micOn = both && await widget.recorder.start(tripId);
       if (micOn) {
         _ride = RideMeta(
           tripId: tripId,
           startedAt: DateTime.now(),
           contentType: widget.recorder.contentType,
+          role: _role,
         );
         await _persist();
       }
@@ -146,7 +176,7 @@ class _TripScreenState extends State<TripScreen> {
       if (micOn) _listening = widget.listen().listen(_onHeard);
       setState(() {
         _tripId = tripId;
-        _safePhraseUsed = false;
+        _safePhraseUsed = _live = false;
         _recording = micOn;
         _driverSafeRide = trip?.driverConsent;
         _rideStart = DateTime.now();
@@ -163,6 +193,9 @@ class _TripScreenState extends State<TripScreen> {
     setState(() => _busy = true);
     await _guard(() async {
       _listening?.cancel(); // nothing to wait for; stop hearing before the ride closes
+      _endHighCheck();
+      _liveTimer?.cancel();
+      await _streaming;
       final tripId = _tripId!;
       final ride = _ride;
       if (ride != null) {
@@ -173,22 +206,22 @@ class _TripScreenState extends State<TripScreen> {
       // shortcut: with no signal the backend trip stays active; nothing reads that status yet.
       await widget.api.endTrip(tripId).catchError((_) {});
       if (ride != null) {
-        // A high or SOS ride goes to the safety team with every moment to check; the rest stays
-        // encrypted on the phone and is deleted after 7 days.
-        final sent = await _sendRecordings();
-        if (mounted) {
-          _say(
-            !ride.flagged
-                ? SafetyText.keptOnPhone
-                : sent.contains(tripId)
-                ? SafetyText.recordingSent
-                : SafetyText.recordingQueued,
-          );
+        if (ride.share == Share.local) {
+          _say(SafetyText.keptOnPhone);
+        } else {
+          final sent = await _sendRecordings();
+          if (mounted) {
+            _say(
+              sent.contains(tripId)
+                  ? SafetyText.recordingSent
+                  : SafetyText.recordingQueued,
+            );
+          }
         }
       }
       setState(() {
         _tripId = _last = _ride = null;
-        _recording = _warning = false;
+        _recording = _warning = _live = false;
       });
     });
     if (mounted) setState(() => _busy = false);
@@ -206,8 +239,41 @@ class _TripScreenState extends State<TripScreen> {
     _persist();
   }
 
-  /// Sends every ended high or SOS ride not sent yet, deletes rides older than 7 days, and
-  /// closes rides the app never ended (it was killed). Runs one at a time. Returns what was sent.
+  /// What leaves the phone only goes up during a ride: local → at end → live.
+  void _raise(Share share) {
+    final ride = _ride;
+    if (ride == null || share.index <= ride.share.index) return;
+    ride.share = share;
+    _persist();
+  }
+
+  /// Emergency: an agent gets the ride so far now, then each new 10-second piece and line.
+  void _goLive() {
+    final ride = _ride;
+    if (ride == null || ride.share == Share.live) return;
+    _raise(Share.live);
+    widget.recorder.goLive();
+    setState(() => _live = true);
+    _streamNow();
+    _liveTimer = Timer.periodic(_pulse, (_) => _streamNow());
+  }
+
+  void _streamNow() {
+    final ride = _ride;
+    if (ride == null) return;
+    _streaming = _streaming.then(
+      (_) => syncRide(
+        widget.api,
+        widget.store,
+        ride,
+        done: false,
+        save: _persist,
+      ).catchError((_) {}), // no signal: the next pulse tries again
+    );
+  }
+
+  /// Sends every ended ride that should leave the phone and hasn't, deletes rides older than 7 days,
+  /// and closes rides the app never ended (it was killed). One run at a time. Returns what was sent.
   Future<Set<String>> _sendRecordings() => _uploads = _uploads.then((_) async {
     final sent = <String>{};
     try {
@@ -221,14 +287,9 @@ class _TripScreenState extends State<TripScreen> {
           await widget.store.save(r);
           await widget.api.endTrip(r.tripId).catchError((_) {});
         }
-        if (!r.ended || !r.flagged || r.uploaded) continue;
+        if (!r.ended || r.share == Share.local || r.uploaded) continue;
         try {
-          await widget.api.uploadRecording(
-            r,
-            await widget.store.audio(r.tripId),
-          );
-          r.uploaded = true;
-          await widget.store.save(r);
+          await syncRide(widget.api, widget.store, r, done: true);
           sent.add(r.tripId);
         } catch (_) {
           // No signal: the next try is in a minute, for as long as the ride is kept.
@@ -251,7 +312,12 @@ class _TripScreenState extends State<TripScreen> {
     _persist();
     if (!_safePhraseUsed && (widget.safePhrase?.heardIn(text) ?? false)) {
       _safePhraseUsed = true;
-      _report('sos');
+      _sos(); // silent: no dialog, no alarm
+      return;
+    }
+    if (_shout && _helpWords.any((w) => w.heardIn(text))) {
+      _sos();
+      return;
     }
     switch (d.action) {
       case SafetyAction.warn:
@@ -259,40 +325,69 @@ class _TripScreenState extends State<TripScreen> {
         setState(() => _warning = true);
       case SafetyAction.high:
         _mark(Marker(at, 'high', verdict: d.verdict, text: text));
-        // The flag goes to the safety team at once, as an escalated case.
-        _deliver('auto', d);
-        _askAreYouOk(
-          (ok) => ok ? _say(SafetyText.okThanks) : _report('sos'),
-          loud: true,
-        );
+        _raise(
+          Share.atEnd,
+        ); // suspicion is high: the whole ride goes to the team at the end
+        _deliver('auto', d); // and the flag goes to an agent at once
+        _startHighCheck();
       case SafetyAction.none:
         break;
     }
   }
 
-  void _askAreYouOk(void Function(bool ok) answer, {bool loud = false}) {
-    widget.alert?.call(loud: loud);
+  /// "Are you okay?" after a high flag, quiet first: buzz every 10 s, Live at 60 s, alarm and
+  /// "shout TOLONG" at 120 s.
+  void _startHighCheck() {
+    var waited = Duration.zero;
+    widget.alert?.call(loud: false);
+    _highCheck = Timer.periodic(_pulse, (timer) {
+      waited += _pulse;
+      if (waited == _goLiveAt) _goLive();
+      if (waited >= _alarmAt) {
+        timer.cancel();
+        widget.alert?.call(loud: true);
+        setState(() => _shout = true);
+      } else {
+        widget.alert?.call(loud: false); // another buzz
+      }
+    });
+    _asking = true;
     askAreYouOk(context).then((ok) {
-      widget.clearAlert?.call();
-      if (ok != null) answer(ok);
+      _asking = false;
+      _endHighCheck();
+      if (ok == true) _say(SafetyText.okThanks);
+      if (ok == false) _sos();
     });
   }
 
-  void _onCheckins(List<String> ids) {
-    for (final id in ids.where(_answered.add)) {
-      _askAreYouOk(
-        (ok) => _guard(() async {
-          await widget.api.replyCheckin(id, ok);
-          if (mounted) _say(ok ? SafetyText.okThanks : SafetyText.helpSent);
-        }),
-      );
-    }
+  void _endHighCheck() {
+    if (_highCheck == null && !_shout) return;
+    _highCheck?.cancel();
+    _highCheck = null;
+    widget.clearAlert?.call();
+    if (mounted && _shout) setState(() => _shout = false);
   }
 
-  Future<void> _report(String trigger) async {
-    _mark(Marker(_sinceStart, trigger, verdict: _last?.verdict));
-    if (await _deliver(trigger, _last) && mounted) {
-      _say(trigger == 'sos' ? SafetyText.helpSent : SafetyText.reportSent);
+  /// SOS button, "I need help", "Yes, get help", the safe phrase, or a shout for help.
+  Future<void> _sos() async {
+    if (_asking) Navigator.of(context).pop(); // close "Are you okay?"
+    _endHighCheck();
+    _mark(Marker(_sinceStart, 'sos', verdict: _last?.verdict));
+    _goLive();
+    if (await _deliver('sos', _last) && mounted) _say(SafetyText.helpSent);
+  }
+
+  /// "Report driver" / "Report passenger": the team reviews the whole ride after it ends.
+  Future<void> _reportOther() async {
+    setState(() => _warning = false);
+    _mark(Marker(_sinceStart, 'manual_unsafe', verdict: _last?.verdict));
+    _raise(Share.atEnd);
+    _deliver('manual_unsafe', _last);
+    final help = await askNeedHelp(context, driver: _driver);
+    if (help == true) {
+      await _sos();
+    } else if (help == false && mounted) {
+      _say(SafetyText.reportThanks);
     }
   }
 
@@ -365,6 +460,20 @@ class _TripScreenState extends State<TripScreen> {
                           ),
                       ],
                     ),
+                  if (_shout)
+                    MaterialBanner(
+                      backgroundColor: GoSafeColors.highTint,
+                      leading: const Icon(Icons.campaign),
+                      content: const Text(SafetyText.shout),
+                      actions: const [SizedBox.shrink()],
+                    ),
+                  if (_live)
+                    MaterialBanner(
+                      backgroundColor: GoSafeColors.highTint,
+                      leading: const Icon(Icons.support_agent),
+                      content: const Text(SafetyText.live),
+                      actions: const [SizedBox.shrink()],
+                    ),
                   if (onRide)
                     MaterialBanner(
                       leading: Icon(
@@ -389,10 +498,7 @@ class _TripScreenState extends State<TripScreen> {
                           child: const Text(SafetyText.warningFine),
                         ),
                         TextButton(
-                          onPressed: () {
-                            setState(() => _warning = false);
-                            _report('manual_unsafe');
-                          },
+                          onPressed: _reportOther,
                           child: const Text(SafetyText.warningReport),
                         ),
                       ],
@@ -468,6 +574,36 @@ class _TripScreenState extends State<TripScreen> {
                             'GoSafe listens for trouble during your ride and gets help fast if you need it.',
                             textAlign: TextAlign.center,
                           ),
+                          // shortcut: one app for both phones in the demo; in production they're two apps.
+                          // Fixed width: the app font loads after first layout, which would wrap "Driver".
+                          SizedBox(
+                            width: 320,
+                            child: SegmentedButton<String>(
+                              showSelectedIcon: false,
+                              segments: const [
+                                ButtonSegment(
+                                  value: 'rider',
+                                  label: Text('Rider'),
+                                  icon: Icon(Icons.person),
+                                ),
+                                ButtonSegment(
+                                  value: 'driver',
+                                  label: Text('Driver'),
+                                  icon: Icon(Icons.two_wheeler),
+                                ),
+                              ],
+                              selected: {_role},
+                              onSelectionChanged: (v) =>
+                                  setState(() => _role = v.single),
+                            ),
+                          ),
+                          if (_driver)
+                            SwitchListTile(
+                              title: const Text('Safe Ride'),
+                              subtitle: const Text(SafetyText.safeRideSetting),
+                              value: _safeRide,
+                              onChanged: (v) => setState(() => _safeRide = v),
+                            ),
                         ],
                       ),
                     ),
@@ -482,8 +618,8 @@ class _TripScreenState extends State<TripScreen> {
                       spacing: 12,
                       children: [
                         OutlinedButton(
-                          onPressed: () => _report('manual_unsafe'),
-                          child: const Text('I feel unsafe'),
+                          onPressed: _reportOther,
+                          child: Text(SafetyText.reportButton(driver: _driver)),
                         ),
                         FilledButton(
                           style: FilledButton.styleFrom(
@@ -491,7 +627,7 @@ class _TripScreenState extends State<TripScreen> {
                             foregroundColor: Colors.white,
                             minimumSize: const Size.fromHeight(64),
                           ),
-                          onPressed: () => _report('sos'),
+                          onPressed: _sos,
                           child: const Text(
                             'SOS',
                             style: TextStyle(

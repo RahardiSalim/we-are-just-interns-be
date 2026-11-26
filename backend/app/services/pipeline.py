@@ -1,19 +1,14 @@
-"""Incident lifecycle after finalize: transcript → label → severity → check-in or escalation.
+"""Incident lifecycle after finalize: transcript → label → severity → escalation to an agent.
 
 Only this module and the API handlers change `incidents.status` (architecture rule 5).
 """
 
 import logging
 import re
-import threading
 from datetime import datetime, timedelta, timezone
 
-from google.cloud import firestore
-from google.cloud.firestore_v1.base_query import FieldFilter
 
-from app.core import config
 from app.core.firebase import db
-from app.services import notify
 from app.services.classify import classify
 
 log = logging.getLogger(__name__)
@@ -51,52 +46,14 @@ def process(incident_id: str) -> None:
                 label, score = kw_label, kw_score
         sev = severity(inc["trigger"], label)
         ref.update({"transcript": lines, "label": label, "score": score, "severity": sev})
-        if sev == "high":
-            escalate(incident_id)  # for trigger auto the phones already asked "Are you OK?" themselves
-        else:
-            start_checkins(incident_id, inc["tripId"])
+        # Every case goes to an agent; severity orders the queue. No check-in: the phone already asked the
+        # rider ("Are you okay?" / "Do you need help right now?"), and asking the driver would tip them off.
+        escalate(incident_id)
     except Exception as e:
         log.exception("processing failed incident=%s", incident_id)
         # An SOS or high flag must still reach an agent: the queue shows escalated cases, not failed ones.
         urgent = inc.get("trigger") in ("sos", "auto")
         ref.update({"status": "escalated" if urgent else "failed", "error": str(e)[:500]})
-
-
-def start_checkins(incident_id: str, trip_id: str) -> None:
-    """Asks rider and driver "Are you OK?" after an "I feel unsafe" press the model couldn't confirm."""
-    trip = db().document("trips", trip_id).get().to_dict()
-    db().document("incidents", incident_id).update({"status": "checkin_pending"})
-    for uid in (trip["riderId"], trip["driverId"]):
-        ref = db().collection("checkins").document()
-        ref.set({"incidentId": incident_id, "userId": uid, "status": "sent",
-                 # A GoRide driver can't tap while riding, so their answer isn't required (silence never escalates).
-                 "required": not (uid == trip["driverId"] and trip.get("mode") == "goride"),
-                 "sentAt": firestore.SERVER_TIMESTAMP, "repliedAt": None})
-        notify.push(uid, {"type": "checkin", "checkinId": ref.id, "incidentId": incident_id})
-    # shortcut: in-process timer; lost if the instance restarts. Move to Cloud Tasks if that bites.
-    timer = threading.Timer(config.CHECKIN_TIMEOUT_SEC, checkin_timeout, [incident_id])
-    timer.daemon = True
-    timer.start()
-
-
-def checkin_timeout(incident_id: str) -> None:
-    ref = db().document("incidents", incident_id)
-
-    @firestore.transactional
-    def expire(tx) -> bool:
-        snap = ref.get(transaction=tx)
-        if not snap.exists or snap.get("status") != "checkin_pending":
-            return False  # already answered
-        silent = [c for c in tx.get(db().collection("checkins").where(filter=FieldFilter("incidentId", "==", incident_id)))
-                  if c.get("status") == "sent"]
-        for c in silent:
-            tx.update(c.reference, {"status": "no_reply"})
-        escalate_now = any(c.get("required") for c in silent)
-        tx.update(ref, {"status": "escalated" if escalate_now else "resolved_ok"})
-        return escalate_now
-
-    if expire(db().transaction()):
-        escalate(incident_id)
 
 
 def escalate(incident_id: str) -> None:
@@ -126,3 +83,12 @@ def summarize(inc: dict) -> str:
     if flagged:
         parts.append("Kalimat yang ditandai: " + " / ".join(f'"{t}"' for t in flagged))
     return " ".join(parts)
+
+
+def upgrade(incident_id: str) -> None:
+    """A more urgent report (SOS, a high flag) joined an open case: make it high and put it in front of an agent."""
+    ref = db().document("incidents", incident_id)
+    status = ref.get().get("status")
+    ref.update({"severity": "high"})
+    if status != "under_review":  # an agent already has it; don't take it back to the queue
+        escalate(incident_id)

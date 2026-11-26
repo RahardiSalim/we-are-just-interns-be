@@ -106,12 +106,6 @@ class GoSafeApp extends StatelessWidget {
                   driverConsent: consent['driver'] == true,
                 );
         },
-        checkins: db
-            .collection('checkins')
-            .where('userId', isEqualTo: user.uid)
-            .where('status', isEqualTo: 'sent')
-            .snapshots()
-            .map((q) => [for (final d in q.docs) d.id]),
         // Lock-screen alerts are Android-only; the web preview shows the dialog alone.
         alert: kIsWeb
             ? null

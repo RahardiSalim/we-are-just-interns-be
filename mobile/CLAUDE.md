@@ -1,6 +1,6 @@
 # mobile
 
-Flutter app, Android only, on the consumer's phone. It records the ride (after consent), transcribes and classifies on the phone, shows kind warnings, sends high flags at once, and after a high or SOS ride uploads the full recording with markers. SOS / "I feel unsafe" are always available.
+Flutter app, Android only, on the rider's and the driver's phone (a Rider / Driver switch on the home screen for the demo; in production they're two apps). It records the ride (after consent), transcribes and classifies on the phone, shows kind warnings, sends high flags at once, and after a high or SOS ride uploads the full recording with markers. SOS / "I feel unsafe" are always available.
 
 Follow the root [CLAUDE.md](../CLAUDE.md) rules. How the app works today, step by step: [README.md](README.md); keep it in sync when you change the engine, screens or payloads. The design is in [contracts/ARCHITECTURE.md](../contracts/ARCHITECTURE.md), section "On-device listening": read it before touching recording, models or storage.
 
@@ -9,7 +9,7 @@ Follow the root [CLAUDE.md](../CLAUDE.md) rules. How the app works today, step b
 - Recording starts only when the consumer said yes and the driver has Safe Ride on, and stops at End ride: 16 kHz mono, AAC `.m4a` (WAV on web). It keeps going with the screen locked through `RideService`, a foreground service with `foregroundServiceType="microphone"` (Kotlin, `android/app/src/main/kotlin/`), reached from Dart via `lib/services/ride.dart`. minSdk 26.
 - Every recorded ride is stored on the phone for 7 days (`RideStore`): 30-second encrypted audio pieces plus `RideMeta` (markers, transcript), saved as the ride goes. After End ride, upload only if the ride had a `high` or `sos` marker, retried every minute until sent. Never offer playback or export in the UI. Everything stored on the phone is AES-GCM encrypted with an Android Keystore key.
 - No location: never request location permission or send GPS / route. A trip is the GoJek order ID (`POST /trips` with `orderId`).
-- Never gate SOS / "I feel unsafe" on the model. The app is the consumer's; there is no driver mode.
+- Never gate SOS / Report on the model. What leaves the phone follows `Share` (local → at end → live); see the README "What leaves the phone, and when".
 - All writes go to FastAPI. Audio uploads go to the signed URL from the API, using the returned `uploadMethod` (PUT in the cloud, POST on the emulator), then call the matching `/finalize` or `/done`.
 - Config: `google-services.json` (not committed), `--dart-define=API_URL=...`, `DEMO_MODE`.
 - Flutter 3.50+: Material widgets come from `package:material_ui/material_ui.dart`, not `package:flutter/material.dart`.

@@ -1,10 +1,10 @@
 "use client";
 
 import Link from "next/link";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { DecisionAction } from "@/lib/api";
 import { isHarmful, kindStyle, labelText, mmss, triggerText, wib } from "@/lib/labels";
-import type { Incident, Marker, Review, Trip } from "@/types/firestore";
+import type { Incident, Marker, Phone, Recording, Review, Trip } from "@/types/firestore";
 
 const actions: { value: DecisionAction; text: string; hint: string }[] = [
   { value: "contact_rider", text: "Contact rider", hint: "Call the rider to check on them and offer support." },
@@ -24,11 +24,15 @@ export function CaseView({
 }: {
   incident: Incident;
   trip: Trip | null;
-  /** Fetches a playable URL. Called only when the agent chooses to listen (it's audit-logged). */
-  loadAudio: () => Promise<string>;
+  /** A playable URL for one phone's recording. Called only when the agent chooses to listen (it's audit-logged). */
+  loadAudio: (phone: Phone) => Promise<string>;
   onDecide: (action: DecisionAction, note: string) => Promise<unknown>;
 }) {
-  const rec = trip?.recording?.status === "uploaded" ? trip.recording : null;
+  // Each phone uploads its own recording; the agent picks which one to hear.
+  const phones = (["rider", "driver"] as const).filter((p) => (trip?.recordings?.[p]?.pieces ?? 0) > 0);
+  const [picked, setPicked] = useState<Phone>();
+  const phone = picked && phones.includes(picked) ? picked : phones[0];
+  const rec: Recording | null = phone ? trip!.recordings![phone]! : null;
   const review = rec?.review;
   const audio = useRef<HTMLAudioElement>(null);
   const [src, setSrc] = useState<string>();
@@ -46,9 +50,36 @@ export function CaseView({
   const closed = incident.status === "closed";
   const canDecide = rec ? listened : readReport;
 
+  // Live: new pieces arrive every ~10 s. Reload the joined audio and keep the agent's place.
+  const pieces = rec?.pieces;
+  useEffect(() => {
+    const el = audio.current;
+    if (!src || !el || !phone || !rec?.live) return;
+    const at = el.currentTime;
+    const playing = !el.paused;
+    loadAudio(phone)
+      .then((url) => {
+        setSrc(url);
+        el.src = url;
+        el.load();
+        el.addEventListener("loadedmetadata", () => {
+          el.currentTime = at;
+          if (playing) el.play();
+        }, { once: true });
+      })
+      .catch(() => {}); // the next piece tries again
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pieces]);
+
+  function pick(p: Phone) {
+    setPicked(p);
+    setSrc(undefined);
+    audio.current?.pause();
+  }
+
   async function playAt(sec: number) {
     try {
-      const url = src ?? (await loadAudio());
+      const url = src ?? (await loadAudio(phone!));
       setSrc(url);
       const el = audio.current!;
       if (el.src !== url) {
@@ -92,6 +123,7 @@ export function CaseView({
 
       <header className="mt-2 flex flex-wrap items-center gap-2">
         <h1 className="mr-2 text-title-medium font-bold">Order {incident.tripId}</h1>
+        {incident.live && <Chip className="animate-pulse bg-sos text-white">● LIVE: the phone is streaming</Chip>}
         <Chip className={incident.severity === "high" ? "bg-high text-white" : "bg-warn text-ink"}>
           {incident.severity === "high" ? "High priority" : "Medium priority"}
         </Chip>
@@ -105,6 +137,16 @@ export function CaseView({
           <Card title="Ride recording">
             {rec ? (
               <>
+                {phones.length > 1 && (
+                  <div className="mb-3 flex gap-2" role="tablist" aria-label="Whose phone">
+                    {phones.map((p) => (
+                      <button key={p} role="tab" aria-selected={p === phone} onClick={() => pick(p)}
+                        className={`rounded-chip border px-3 py-1 text-body-small font-semibold ${p === phone ? "border-brand bg-brand-tint" : "border-line"}`}>
+                        {p === "rider" ? "Rider's phone" : "Driver's phone"}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 <p className="mb-3 text-body-small text-muted">
                   Jump straight to a flag; you don&apos;t need to hear the whole ride. Playback is logged.
                 </p>
@@ -119,9 +161,9 @@ export function CaseView({
               </>
             ) : (
               <p className="text-body-small text-muted">
-                {trip?.recording
-                  ? "The phone is still uploading the full ride."
-                  : "No full recording: it uploads after the ride ends, and only for rides with a high flag or an SOS."}
+                {trip?.recordings
+                  ? "The phone is still uploading the ride."
+                  : "No recording yet: a reported or high-flag ride uploads when it ends; an SOS streams it live."}
               </p>
             )}
           </Card>
@@ -265,7 +307,7 @@ function strongest(markers: Marker[]): Marker | undefined {
   return [...markers].sort((a, b) => rank[b.kind] - rank[a.kind])[0];
 }
 
-function FlagTimeline({ rec, now, onSeek }: { rec: NonNullable<Trip["recording"]>; now: number; onSeek: (at: number) => void }) {
+function FlagTimeline({ rec, now, onSeek }: { rec: Recording; now: number; onSeek: (at: number) => void }) {
   const pct = (at: number) => `${Math.min(100, (at / Math.max(rec.durationSec, 1)) * 100)}%`;
   return (
     <div>
