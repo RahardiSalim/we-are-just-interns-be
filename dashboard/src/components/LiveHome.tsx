@@ -18,7 +18,7 @@ export default function LiveHome() {
           await signOut(auth); // fires this listener again with null
           return;
         }
-        setUser(u);
+        if (auth.currentUser === u) setUser(u); // skip if they signed out while the role check ran
       }),
     [],
   );
