@@ -87,17 +87,17 @@ export function CaseView({
   }
 
   return (
-    <main className="mx-auto w-full max-w-6xl px-4 py-6">
-      <Link href="/" className="text-sm text-neutral-500 hover:underline">← Queue</Link>
+    <main className="mx-auto w-full max-w-6xl px-6 py-6">
+      <Link href="/" className="text-body-small font-semibold text-brand-deep hover:underline dark:text-brand">← Queue</Link>
 
       <header className="mt-2 flex flex-wrap items-center gap-2">
-        <h1 className="mr-2 text-2xl font-semibold">Order {incident.tripId}</h1>
-        <Chip className={incident.severity === "high" ? "bg-red-600 text-white" : "bg-amber-500 text-white"}>
+        <h1 className="mr-2 text-title-medium font-bold">Order {incident.tripId}</h1>
+        <Chip className={incident.severity === "high" ? "bg-high text-white" : "bg-warn text-ink"}>
           {incident.severity === "high" ? "High priority" : "Medium priority"}
         </Chip>
-        <Chip className="bg-neutral-100 dark:bg-neutral-800">{triggerText[incident.trigger]}</Chip>
-        <Chip className="bg-neutral-100 dark:bg-neutral-800">{incident.status.replaceAll("_", " ")}</Chip>
-        <span className="ml-auto text-sm text-neutral-500">Reported {wib.format(incident.createdAt.toDate())} WIB</span>
+        <Chip className="bg-surface">{triggerText[incident.trigger]}</Chip>
+        <Chip className="bg-surface">{incident.status.replaceAll("_", " ")}</Chip>
+        <span className="ml-auto text-body-small text-muted">Reported {wib.format(incident.createdAt.toDate())} WIB</span>
       </header>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
@@ -105,20 +105,20 @@ export function CaseView({
           <Card title="Ride recording">
             {rec ? (
               <>
-                <p className="mb-3 text-sm text-neutral-500">
+                <p className="mb-3 text-body-small text-muted">
                   Jump straight to a flag; you don&apos;t need to hear the whole ride. Playback is logged.
                 </p>
                 <FlagTimeline rec={rec} now={now} onSeek={playAt} />
                 <audio ref={audio} controls preload="none" onTimeUpdate={onTime} className="mt-3 w-full" />
                 {!src && (
-                  <button onClick={() => playAt(rec.markers[0]?.at ?? 0)} className="mt-2 text-sm font-medium underline">
+                  <button onClick={() => playAt(rec.markers[0]?.at ?? 0)} className="mt-2 text-body-small font-semibold text-brand-deep underline dark:text-brand">
                     Load recording
                   </button>
                 )}
-                {audioError && <p role="alert" className="mt-2 text-sm text-red-600">{audioError}</p>}
+                {audioError && <p role="alert" className="mt-2 text-body-small text-high">{audioError}</p>}
               </>
             ) : (
-              <p className="text-sm text-neutral-500">
+              <p className="text-body-small text-muted">
                 {trip?.recording
                   ? "The phone is still uploading the full ride."
                   : "No full recording: it uploads after the ride ends, and only for rides with a high flag or an SOS."}
@@ -137,23 +137,23 @@ export function CaseView({
                     <li key={line.at}>
                       <button
                         onClick={() => playAt(line.at)}
-                        className={`flex w-full gap-3 rounded border-l-4 px-3 py-1.5 text-left text-sm ${
+                        className={`flex w-full gap-3 rounded-chip border-l-4 px-3 py-1.5 text-left text-body-small ${
                           marker ? kindStyle[marker.kind].line : "border-transparent"
-                        } ${active ? "ring-2 ring-neutral-400" : ""}`}
+                        } ${active ? "ring-2 ring-brand" : ""}`}
                       >
-                        <span className="font-mono text-neutral-500">{mmss(line.at)}</span>
+                        <span className="font-mono text-muted">{mmss(line.at)}</span>
                         <span className="flex-1">{line.text}</span>
-                        {marker && <span className={`shrink-0 rounded px-1.5 text-xs ${kindStyle[marker.kind].chip}`}>{kindStyle[marker.kind].text}</span>}
+                        {marker && <span className={`shrink-0 rounded-chip px-2 text-caption font-semibold ${kindStyle[marker.kind].chip}`}>{kindStyle[marker.kind].text}</span>}
                       </button>
                     </li>
                   );
                 })}
               </ol>
             ) : (
-              <ol className="flex flex-col gap-1 text-sm">
+              <ol className="flex flex-col gap-1 text-body-small">
                 {incident.transcript.map((t) => (
-                  <li key={t.start} className={`rounded border-l-4 px-3 py-1.5 ${t.flagged ? kindStyle.high.line : "border-transparent"}`}>
-                    <span className="mr-3 font-mono text-neutral-500">{mmss(t.start)}</span>
+                  <li key={t.start} className={`rounded-chip border-l-4 px-3 py-1.5 ${t.flagged ? kindStyle.high.line : "border-transparent"}`}>
+                    <span className="mr-3 font-mono text-muted">{mmss(t.start)}</span>
                     {t.text}
                   </li>
                 ))}
@@ -165,7 +165,7 @@ export function CaseView({
         <div className="flex min-w-0 flex-col gap-6">
           <Card title="AI review" aside={review && <SourceBadge review={review} />}>
             {review ? (
-              <div className="flex flex-col gap-3 text-sm">
+              <div className="flex flex-col gap-3 text-body-small">
                 <Verdict
                   phone={phoneFlag ? `${kindStyle[phoneFlag.kind].text}${phoneFlag.label ? ` · ${labelText[phoneFlag.label]}` : ""}` : incident.label ? labelText[incident.label] : "None"}
                   ai={labelText[review.label]}
@@ -175,49 +175,49 @@ export function CaseView({
                 <p>{review.summary}</p>
                 {review.moments.length > 0 && (
                   <div>
-                    <h3 className="mb-1 font-medium">Why (click to listen)</h3>
+                    <h3 className="mb-1 font-semibold">Why (click to listen)</h3>
                     <ul className="flex flex-col gap-1">
                       {review.moments.map((m) => (
                         <li key={m.at} className="flex gap-2">
-                          <button onClick={() => playAt(m.at)} className="font-mono text-blue-700 underline dark:text-blue-300">
+                          <button onClick={() => playAt(m.at)} className="font-mono font-semibold text-brand-deep underline dark:text-brand">
                             {mmss(m.at)}
                           </button>
                           <span>
-                            <span className="font-medium">{labelText[m.label]}:</span> {m.reason}
+                            <span className="font-semibold">{labelText[m.label]}:</span> {m.reason}
                           </span>
                         </li>
                       ))}
                     </ul>
                   </div>
                 )}
-                {review.note && <p className="text-xs text-neutral-500">{review.note}</p>}
-                <p className="rounded bg-neutral-100 p-2 text-xs dark:bg-neutral-800">
+                {review.note && <p className="text-caption text-muted">{review.note}</p>}
+                <p className="rounded-chip bg-surface p-3 text-caption">
                   AI can be wrong. Listen to the flagged moments yourself before deciding.
                 </p>
               </div>
             ) : (
-              <p className="text-sm text-neutral-500">
+              <p className="text-body-small text-muted">
                 {rec ? "Reviewing the ride…" : "Appears once the full recording has been uploaded."}
               </p>
             )}
           </Card>
 
           <Card title="Phone's report">
-            <p className="text-sm">{incident.summary ?? "No summary."}</p>
+            <p className="text-body-small">{incident.summary ?? "No summary."}</p>
           </Card>
 
           <Card title="Decision">
             {closed ? (
-              <p className="text-sm">This case is closed.</p>
+              <p className="text-body-small">This case is closed.</p>
             ) : (
               <div className="flex flex-col gap-3">
                 <fieldset className="flex flex-col gap-2">
                   {actions.map((a) => (
-                    <label key={a.value} className="flex cursor-pointer gap-2 rounded border border-neutral-200 p-2 text-sm dark:border-neutral-700">
+                    <label key={a.value} className="flex cursor-pointer gap-2 rounded border border-line p-3 text-body-small hover:border-brand has-[:checked]:border-brand has-[:checked]:bg-brand-tint">
                       <input type="radio" name="action" value={a.value} checked={action === a.value} onChange={() => setAction(a.value)} />
                       <span>
-                        <span className="font-medium">{a.text}</span>
-                        <span className="block text-neutral-500">{a.hint}</span>
+                        <span className="font-semibold">{a.text}</span>
+                        <span className="block text-muted">{a.hint}</span>
                       </span>
                     </label>
                   ))}
@@ -226,23 +226,23 @@ export function CaseView({
                   value={note}
                   onChange={(e) => setNote(e.target.value)}
                   placeholder="Note for the case file (what you heard, who you contacted)"
-                  className="min-h-20 rounded border border-neutral-300 p-2 text-sm dark:border-neutral-700 dark:bg-neutral-900"
+                  className="min-h-20 rounded-chip border border-line bg-canvas p-3 text-body-small"
                 />
                 {rec ? (
-                  <p className={`text-xs ${listened ? "text-emerald-700 dark:text-emerald-400" : "text-neutral-500"}`}>
+                  <p className={`text-caption ${listened ? "text-brand-deep dark:text-brand" : "text-muted"}`}>
                     {listened ? "✓ You listened to a flagged moment." : "Listen to at least one flagged moment to decide."}
                   </p>
                 ) : (
-                  <label className="flex gap-2 text-xs">
+                  <label className="flex gap-2 text-caption">
                     <input type="checkbox" checked={readReport} onChange={(e) => setReadReport(e.target.checked)} />
                     I read the phone&apos;s report and transcript.
                   </label>
                 )}
-                {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
+                {error && <p role="alert" className="text-body-small text-high">{error}</p>}
                 <button
                   disabled={!action || !canDecide || busy}
                   onClick={submit}
-                  className="rounded bg-emerald-700 px-3 py-2 font-medium text-white disabled:opacity-40"
+                  className="h-10 rounded-full bg-brand-strong px-5 text-title-tiny font-semibold text-white hover:bg-brand-deep disabled:opacity-40"
                 >
                   {busy ? "Saving…" : "Record decision"}
                 </button>
@@ -264,26 +264,26 @@ function FlagTimeline({ rec, now, onSeek }: { rec: NonNullable<Trip["recording"]
   const pct = (at: number) => `${Math.min(100, (at / Math.max(rec.durationSec, 1)) * 100)}%`;
   return (
     <div>
-      <div className="relative h-8 rounded bg-neutral-100 dark:bg-neutral-800" aria-label="Flags along the ride">
-        <div className="absolute inset-y-0 left-0 rounded bg-neutral-300/60 dark:bg-neutral-600/60" style={{ width: pct(now) }} />
+      <div className="relative h-8 rounded bg-surface" aria-label="Flags along the ride">
+        <div className="absolute inset-y-0 left-0 rounded-chip bg-brand-tint" style={{ width: pct(now) }} />
         {rec.markers.map((m) => (
           <button
             key={`${m.kind}-${m.at}`}
             onClick={() => onSeek(m.at)}
             title={`${kindStyle[m.kind].text} at ${mmss(m.at)}`}
             aria-label={`${kindStyle[m.kind].text} at ${mmss(m.at)}`}
-            className={`absolute top-1 h-6 w-2 -translate-x-1/2 rounded ${kindStyle[m.kind].dot}`}
+            className={`absolute top-1 h-6 w-2 -translate-x-1/2 rounded-full ${kindStyle[m.kind].dot}`}
             style={{ left: pct(m.at) }}
           />
         ))}
       </div>
-      <div className="mt-1 flex justify-between font-mono text-xs text-neutral-500">
+      <div className="mt-1 flex justify-between font-mono text-caption text-muted">
         <span>00:00</span>
         <span>{mmss(rec.durationSec)}</span>
       </div>
       <div className="mt-3 flex flex-wrap gap-2">
         {rec.markers.map((m) => (
-          <button key={`${m.kind}-${m.at}`} onClick={() => onSeek(m.at)} className={`rounded px-2 py-1 text-xs ${kindStyle[m.kind].chip}`}>
+          <button key={`${m.kind}-${m.at}`} onClick={() => onSeek(m.at)} className={`rounded-full px-3 py-1 text-caption font-semibold ${kindStyle[m.kind].chip}`}>
             ▶ {mmss(m.at)} · {kindStyle[m.kind].text}
             {m.label ? ` · ${labelText[m.label]}` : ""}
             {m.score != null ? ` ${Math.round(m.score * 100)}%` : ""}
@@ -297,19 +297,19 @@ function FlagTimeline({ rec, now, onSeek }: { rec: NonNullable<Trip["recording"]
 function Verdict({ phone, ai, confidence, agree }: { phone: string; ai: string; confidence: number; agree: boolean }) {
   return (
     <div className="grid grid-cols-2 gap-2">
-      <div className="rounded border border-neutral-200 p-2 dark:border-neutral-700">
-        <div className="text-xs text-neutral-500">Phone flagged</div>
-        <div className="font-medium">{phone}</div>
+      <div className="rounded border border-line p-3">
+        <div className="text-caption text-muted">Phone flagged</div>
+        <div className="font-semibold">{phone}</div>
       </div>
-      <div className="rounded border border-neutral-200 p-2 dark:border-neutral-700">
-        <div className="text-xs text-neutral-500">AI reads it as</div>
-        <div className="font-medium">{ai}</div>
-        <div className="mt-1 h-1.5 rounded bg-neutral-200 dark:bg-neutral-700">
-          <div className="h-1.5 rounded bg-neutral-700 dark:bg-neutral-300" style={{ width: `${Math.round(confidence * 100)}%` }} />
+      <div className="rounded border border-line p-3">
+        <div className="text-caption text-muted">AI reads it as</div>
+        <div className="font-semibold">{ai}</div>
+        <div className="mt-1 h-1.5 rounded-full bg-line">
+          <div className="h-1.5 rounded-full bg-brand" style={{ width: `${Math.round(confidence * 100)}%` }} />
         </div>
-        <div className="text-xs text-neutral-500">{Math.round(confidence * 100)}% confident</div>
+        <div className="text-caption text-muted">{Math.round(confidence * 100)}% confident</div>
       </div>
-      <div className={`col-span-2 rounded px-2 py-1 text-xs ${agree ? "bg-emerald-50 text-emerald-900 dark:bg-emerald-950 dark:text-emerald-200" : "bg-amber-50 text-amber-900 dark:bg-amber-950 dark:text-amber-200"}`}>
+      <div className={`col-span-2 rounded-full px-3 py-1 text-caption font-semibold ${agree ? "bg-brand-tint text-fg" : "bg-warn-tint text-fg"}`}>
         {agree ? "The AI agrees with the phone's flag." : "The AI reads this differently from the phone. Listen carefully."}
       </div>
     </div>
@@ -318,14 +318,14 @@ function Verdict({ phone, ai, confidence, agree }: { phone: string; ai: string; 
 
 function SourceBadge({ review }: { review: Review }) {
   const text = { "sahabat-ai": "Sahabat-AI", gemini: "Gemini", rules: "Rule-based" }[review.source];
-  return <span className="rounded bg-neutral-100 px-2 py-0.5 text-xs dark:bg-neutral-800">{text}</span>;
+  return <span className="rounded-chip bg-surface px-2 py-0.5 text-caption font-semibold">{text}</span>;
 }
 
 function Card({ title, aside, children }: { title: string; aside?: React.ReactNode; children: React.ReactNode }) {
   return (
-    <section className="rounded-lg border border-neutral-200 p-4 dark:border-neutral-800">
+    <section className="rounded-card border border-line bg-canvas p-5">
       <div className="mb-3 flex items-center gap-2">
-        <h2 className="font-semibold">{title}</h2>
+        <h2 className="text-title-small font-semibold">{title}</h2>
         <span className="ml-auto">{aside}</span>
       </div>
       {children}
@@ -334,5 +334,5 @@ function Card({ title, aside, children }: { title: string; aside?: React.ReactNo
 }
 
 function Chip({ className, children }: { className: string; children: React.ReactNode }) {
-  return <span className={`rounded px-2 py-0.5 text-sm font-medium ${className}`}>{children}</span>;
+  return <span className={`rounded-chip px-2 py-0.5 text-body-small font-semibold ${className}`}>{children}</span>;
 }

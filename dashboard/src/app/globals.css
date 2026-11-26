@@ -1,26 +1,97 @@
 @import "tailwindcss";
 
+/* Tokens from contracts/DESIGN.md (Gojek Asphalt). Use these, not raw Tailwind colours. */
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --canvas: #ffffff;
+  --surface: #f7f7f7;
+  --line: #e5e5e5;
+  --fg: #1c1c1c;
+  --muted: #6b6b6b;
+  --brand-tint: #e6f7e8;
+  --warn-tint: #fff6e0;
+  --unsafe-tint: #fdeee6;
+  --high-tint: #fdecea;
+  --sos-tint: #f7e8e8;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+    --canvas: #121212;
+    --surface: #1c1c1c;
+    --line: #2e2e2e;
+    --fg: #f2f2f2;
+    --muted: #a3a3a3;
+    --brand-tint: #0f2e13;
+    --warn-tint: #33280c;
+    --unsafe-tint: #3a1f10;
+    --high-tint: #3d1714;
+    --sos-tint: #3a1010;
   }
 }
 
+@theme inline {
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+
+  --color-canvas: var(--canvas);
+  --color-surface: var(--surface);
+  --color-line: var(--line);
+  --color-fg: var(--fg);
+  --color-muted: var(--muted);
+
+  --color-brand: #00aa13; /* Gojek green: brand moments, large text, focus */
+  --color-brand-strong: #008a10; /* fills with normal-size text (AA 4.5:1) */
+  --color-brand-deep: #00800e; /* pressed, green text on white */
+  --color-brand-tint: var(--brand-tint);
+
+  --color-warn: #f5a300; /* ink text only */
+  --color-warn-tint: var(--warn-tint);
+  --color-unsafe: #e8590c; /* ink text only */
+  --color-unsafe-tint: var(--unsafe-tint);
+  --color-high: #d92d20;
+  --color-high-tint: var(--high-tint);
+  --color-sos: #7a1414;
+  --color-sos-tint: var(--sos-tint);
+  --color-danger: #d92d20;
+  --color-ink: #1c1c1c; /* text on warn / unsafe fills, in both themes */
+
+  --radius-chip: 8px;
+  --radius-card: 12px;
+  --radius-sheet: 16px;
+
+  --shadow-low: 0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.08);
+  --shadow-high: 0 8px 24px rgb(0 0 0 / 0.12);
+
+  /* Asphalt scale: base 12, x1.3, line height rounded to 4 */
+  --text-title-hero: 44px;
+  --text-title-hero--line-height: 56px;
+  --text-title-large: 34px;
+  --text-title-large--line-height: 44px;
+  --text-title-medium: 26px;
+  --text-title-medium--line-height: 36px;
+  --text-title-small: 20px;
+  --text-title-small--line-height: 28px;
+  --text-title-tiny: 16px;
+  --text-title-tiny--line-height: 20px;
+  --text-body-moderate: 16px;
+  --text-body-moderate--line-height: 24px;
+  --text-body-small: 14px;
+  --text-body-small--line-height: 20px;
+  --text-caption: 12px;
+  --text-caption--line-height: 16px;
+}
+
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--canvas);
+  color: var(--fg);
+}
+
+:focus-visible {
+  outline: 2px solid #00aa13;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+  }
 }

@@ -13,32 +13,12 @@ export const triggerText: Record<Incident["trigger"], string> = {
   auto: "Auto-detected on phone",
 };
 
-/** One colour per flag kind, used for pins, chips and transcript lines alike. */
+/** One colour per flag kind (contracts/DESIGN.md "Safety meaning"), for pins, chips and transcript lines alike. */
 export const kindStyle: Record<MarkerKind, { text: string; dot: string; chip: string; line: string }> = {
-  warning: {
-    text: "Warning",
-    dot: "bg-amber-500",
-    chip: "bg-amber-100 text-amber-900 dark:bg-amber-950 dark:text-amber-200",
-    line: "border-amber-500 bg-amber-50 dark:bg-amber-950/40",
-  },
-  high: {
-    text: "High flag",
-    dot: "bg-red-600",
-    chip: "bg-red-100 text-red-900 dark:bg-red-950 dark:text-red-200",
-    line: "border-red-600 bg-red-50 dark:bg-red-950/40",
-  },
-  sos: {
-    text: "SOS",
-    dot: "bg-rose-900",
-    chip: "bg-rose-200 text-rose-950 dark:bg-rose-950 dark:text-rose-200",
-    line: "border-rose-900 bg-rose-50 dark:bg-rose-950/40",
-  },
-  manual_unsafe: {
-    text: "I feel unsafe",
-    dot: "bg-orange-500",
-    chip: "bg-orange-100 text-orange-900 dark:bg-orange-950 dark:text-orange-200",
-    line: "border-orange-500 bg-orange-50 dark:bg-orange-950/40",
-  },
+  warning: { text: "Warning", dot: "bg-warn", chip: "bg-warn-tint text-fg", line: "border-warn bg-warn-tint" },
+  high: { text: "High flag", dot: "bg-high", chip: "bg-high-tint text-fg", line: "border-high bg-high-tint" },
+  sos: { text: "SOS", dot: "bg-sos", chip: "bg-sos-tint text-fg", line: "border-sos bg-sos-tint" },
+  manual_unsafe: { text: "I feel unsafe", dot: "bg-unsafe", chip: "bg-unsafe-tint text-fg", line: "border-unsafe bg-unsafe-tint" },
 };
 
 export const mmss = (sec: number) =>

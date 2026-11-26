@@ -41,8 +41,8 @@ export default function LiveCase({ id }: { id: string }) {
 
   if (user === undefined) return null;
   if (!user) return <LoginForm key={notice} notice={notice} />;
-  if (error) return <p role="alert" className="p-8 text-red-600">Could not load this case: {error}</p>;
-  if (incident === undefined) return <p className="p-8 text-neutral-500">Loading…</p>;
+  if (error) return <p role="alert" className="p-8 text-high">Could not load this case: {error}</p>;
+  if (incident === undefined) return <p className="p-8 text-muted">Loading…</p>;
   if (incident === null) return <p className="p-8">Case not found.</p>;
 
   return (

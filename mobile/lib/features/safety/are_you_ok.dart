@@ -1,5 +1,7 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../theme.dart';
+
 /// Short and caring, never alarming. The words people see when something seems wrong.
 abstract final class SafetyText {
   static const consentTitle = 'Keep this ride safe?';
@@ -34,7 +36,7 @@ abstract final class SafetyText {
 Future<bool?> askAreYouOk(BuildContext context) => showDialog<bool>(
   context: context,
   builder: (context) => AlertDialog(
-    icon: const Icon(Icons.favorite),
+    icon: const Icon(Icons.favorite, color: GoSafeColors.high),
     title: const Text(SafetyText.askTitle),
     content: const Text(SafetyText.askBody),
     actions: [
@@ -43,9 +45,7 @@ Future<bool?> askAreYouOk(BuildContext context) => showDialog<bool>(
         child: const Text(SafetyText.askOk),
       ),
       FilledButton(
-        style: FilledButton.styleFrom(
-          backgroundColor: Theme.of(context).colorScheme.error,
-        ),
+        style: FilledButton.styleFrom(backgroundColor: GoSafeColors.high),
         onPressed: () => Navigator.pop(context, false),
         child: const Text(SafetyText.askHelp),
       ),
@@ -60,7 +60,7 @@ Future<bool> askConsent(BuildContext context) async =>
       context: context,
       barrierDismissible: false,
       builder: (context) => AlertDialog(
-        icon: const Icon(Icons.mic),
+        icon: const Icon(Icons.mic, color: GoSafeColors.brand),
         title: const Text(SafetyText.consentTitle),
         content: const Text(SafetyText.consentBody),
         actions: [

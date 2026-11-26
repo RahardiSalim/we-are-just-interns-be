@@ -2,12 +2,14 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'features/trip/trip_screen.dart';
 import 'services/api.dart';
 import 'services/mock_listener.dart';
 import 'services/recorder.dart';
+import 'theme.dart';
 
 // shortcut: only the local emulators exist so far (offline project demo-gosafe). Use real
 // FirebaseOptions (flutterfire configure) and USE_EMULATORS=false once the Firebase project exists.
@@ -35,6 +37,9 @@ Future<void> main() async {
   }
   // No login screen for the hackathon: each install gets an anonymous account, so the backend
   // still knows whose ride and report it is. In production the GoJek app's own login replaces this.
+  // A login restored from an earlier run refreshes its token against Google, not the emulator,
+  // and fails after an hour. Anonymous accounts are throwaway here, so start fresh each launch.
+  if (_useEmulators) await auth.signOut();
   final user = auth.currentUser ?? (await auth.signInAnonymously()).user!;
   runApp(GoSafeApp(user: user));
 }
@@ -49,10 +54,14 @@ class GoSafeApp extends StatelessWidget {
     final db = FirebaseFirestore.instance;
     return MaterialApp(
       title: 'GoSafe',
-      theme: ThemeData(colorSchemeSeed: const Color(0xFF00AA13)),
-      darkTheme: ThemeData(
-        colorSchemeSeed: const Color(0xFF00AA13),
-        brightness: Brightness.dark,
+      // Plus Jakarta Sans stands in for Asphalt's Maison Neue (licensed); see contracts/DESIGN.md.
+      theme: goSafeTheme(
+        Brightness.light,
+        fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
+      ),
+      darkTheme: goSafeTheme(
+        Brightness.dark,
+        fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
       ),
       home: TripScreen(
         api: Api(token: () => user.getIdToken()),

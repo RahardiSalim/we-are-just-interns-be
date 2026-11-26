@@ -6,6 +6,7 @@ Read before writing code:
 - [contracts/ARCHITECTURE.md](contracts/ARCHITECTURE.md): stack, API contract, incident lifecycle, deployment, phases
 - [contracts/firestore-schema.md](contracts/firestore-schema.md): collections, fields, enums
 - [mobile/README.md](mobile/README.md): how the mobile app's logic works (the core of the product)
+- [contracts/DESIGN.md](contracts/DESIGN.md): the shared look (Gojek Asphalt): colours, type, spacing, components. Both apps use its tokens
 - `contracts/openapi.json`: exported from FastAPI (`backend/scripts/export_openapi.py`), committed
 
 | Folder | App | Deploys to |

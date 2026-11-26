@@ -23,7 +23,7 @@ export function IncidentQueue() {
     );
   }, []);
 
-  if (error) return <p role="alert" className="text-red-600">Could not load incidents: {error}</p>;
-  if (!incidents) return <p className="text-neutral-500">Loading…</p>;
+  if (error) return <p role="alert" className="text-high">Could not load incidents: {error}</p>;
+  if (!incidents) return <p className="text-muted">Loading…</p>;
   return <IncidentList incidents={incidents} />;
 }

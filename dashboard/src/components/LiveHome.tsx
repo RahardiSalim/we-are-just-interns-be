@@ -13,11 +13,11 @@ export default function LiveHome() {
   if (!user) return <LoginForm key={notice} notice={notice} />;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8">
+    <main className="mx-auto w-full max-w-3xl px-6 py-8">
       <header className="mb-6 flex items-center gap-4">
-        <h1 className="text-xl font-semibold">Open cases</h1>
-        <span className="ml-auto text-sm text-neutral-500">{user.email}</span>
-        <button onClick={() => signOut(auth)} className="text-sm underline">
+        <h1 className="text-title-medium font-bold">Open cases</h1>
+        <span className="ml-auto text-body-small text-muted">{user.email}</span>
+        <button onClick={() => signOut(auth)} className="text-body-small underline">
           Sign out
         </button>
       </header>

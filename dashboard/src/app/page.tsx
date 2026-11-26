@@ -11,10 +11,10 @@ export default function Home() {
   if (!MOCK) return <LiveHome />;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-4 py-8">
+    <main className="mx-auto w-full max-w-3xl px-6 py-8">
       <header className="mb-6 flex items-center gap-4">
-        <h1 className="text-xl font-semibold">Open incidents</h1>
-        <span className="ml-auto rounded bg-neutral-100 px-2 py-0.5 text-sm text-neutral-600 dark:bg-neutral-800 dark:text-neutral-300">
+        <h1 className="text-title-medium font-bold">Open cases</h1>
+        <span className="ml-auto rounded-chip bg-surface px-2 py-0.5 text-body-small text-muted">
           Mock data
         </span>
       </header>

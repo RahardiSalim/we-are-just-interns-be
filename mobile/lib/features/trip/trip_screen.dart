@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../../engine/safety_engine.dart';
 import '../../services/api.dart';
 import '../../services/recorder.dart';
+import '../../theme.dart';
 import '../safety/are_you_ok.dart';
 
 typedef TripInfo = ({bool riderConsent, bool driverConsent});
@@ -207,7 +208,6 @@ class _TripScreenState extends State<TripScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final colors = Theme.of(context).colorScheme;
     final text = Theme.of(context).textTheme;
     final onRide = _tripId != null;
 
@@ -239,7 +239,7 @@ class _TripScreenState extends State<TripScreen> {
                     MaterialBanner(
                       leading: Icon(
                         _recording ? Icons.mic : Icons.mic_off,
-                        color: _recording ? Colors.red : null,
+                        color: _recording ? GoSafeColors.high : null,
                       ),
                       content: Text(
                         _recording
@@ -250,7 +250,7 @@ class _TripScreenState extends State<TripScreen> {
                     ),
                   if (_warning)
                     MaterialBanner(
-                      backgroundColor: colors.tertiaryContainer,
+                      backgroundColor: GoSafeColors.warnTint,
                       leading: const Icon(Icons.volunteer_activism),
                       content: const Text(SafetyText.warning),
                       actions: [
@@ -285,7 +285,7 @@ class _TripScreenState extends State<TripScreen> {
                       padding: const EdgeInsets.all(16),
                       child: Text(
                         _notice!,
-                        style: TextStyle(color: colors.error),
+                        style: TextStyle(color: GoSafeColors.high),
                       ),
                     ),
                   if (onRide) ...[
@@ -324,10 +324,15 @@ class _TripScreenState extends State<TripScreen> {
                       child: Column(
                         spacing: 16,
                         children: [
-                          Icon(Icons.shield, size: 64, color: colors.primary),
+                          Icon(
+                            Icons.verified_user,
+                            size: 64,
+                            color: GoSafeColors.brand,
+                          ),
                           Text(
                             'Ride with peace of mind',
                             style: text.titleLarge,
+                            textAlign: TextAlign.center,
                           ),
                           const Text(
                             'GoSafe listens for trouble during your ride and gets help fast if you need it.',
@@ -352,8 +357,8 @@ class _TripScreenState extends State<TripScreen> {
                         ),
                         FilledButton(
                           style: FilledButton.styleFrom(
-                            backgroundColor: colors.error,
-                            foregroundColor: colors.onError,
+                            backgroundColor: GoSafeColors.sos,
+                            foregroundColor: Colors.white,
                             minimumSize: const Size.fromHeight(64),
                           ),
                           onPressed: () => _report('sos'),

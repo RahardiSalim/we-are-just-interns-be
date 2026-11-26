@@ -3,7 +3,7 @@ import { byPriority, labelText, triggerText, wib } from "@/lib/labels";
 import type { Incident } from "@/types/firestore";
 
 export function IncidentList({ incidents }: { incidents: Incident[] }) {
-  if (incidents.length === 0) return <p className="text-neutral-500">No open cases.</p>;
+  if (incidents.length === 0) return <p className="text-muted">No open cases.</p>;
 
   return (
     <ul className="flex flex-col gap-3">
@@ -11,21 +11,21 @@ export function IncidentList({ incidents }: { incidents: Incident[] }) {
         <li key={i.id}>
           <Link
             href={`/incidents/${i.id}`}
-            className="block rounded-lg border border-neutral-200 p-4 transition hover:border-neutral-400 dark:border-neutral-800 dark:hover:border-neutral-600"
+            className="block rounded-card border border-line bg-canvas p-5 transition hover:border-brand hover:shadow-low"
           >
-            <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className={`rounded px-2 py-0.5 font-medium text-white ${i.severity === "high" ? "bg-red-600" : "bg-amber-500"}`}>
+            <div className="flex flex-wrap items-center gap-2 text-body-small">
+              <span className={`rounded-chip px-2 py-0.5 font-semibold ${i.severity === "high" ? "bg-high text-white" : "bg-warn text-ink"}`}>
                 {i.severity === "high" ? "High" : "Medium"}
               </span>
-              <span className="font-medium">{i.label ? labelText[i.label] : "Unlabelled"}</span>
-              {i.score != null && <span className="text-neutral-500">{Math.round(i.score * 100)}%</span>}
-              <span className="ml-auto text-neutral-500">{wib.format(i.createdAt.toDate())} WIB</span>
+              <span className="font-semibold">{i.label ? labelText[i.label] : "Unlabelled"}</span>
+              {i.score != null && <span className="text-muted">{Math.round(i.score * 100)}%</span>}
+              <span className="ml-auto text-muted">{wib.format(i.createdAt.toDate())} WIB</span>
             </div>
-            <p className="mt-1 text-sm text-neutral-500">
+            <p className="mt-1 text-body-small text-muted">
               {triggerText[i.trigger]} · order {i.tripId} · {i.status.replaceAll("_", " ")}
             </p>
             {i.summary && <p className="mt-2 line-clamp-2">{i.summary}</p>}
-            <p className="mt-2 text-sm font-medium">Open case →</p>
+            <p className="mt-3 text-body-small font-semibold text-brand-deep dark:text-brand">Open case →</p>
           </Link>
         </li>
       ))}

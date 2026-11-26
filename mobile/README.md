@@ -198,7 +198,8 @@ Other calls: `POST /trips` (with `riderConsent`), `POST /trips/{id}/end` and `PO
 
 | File | Job |
 |---|---|
-| `lib/main.dart` | Starts Firebase (pointed at the emulators), signs in anonymously, builds the ride screen with the real API, microphone and Firestore |
+| `lib/main.dart` | Starts Firebase (pointed at the emulators), signs in anonymously (fresh each launch in emulator mode), builds the ride screen with the real API, microphone and Firestore |
+| `lib/theme.dart` | Design tokens and the app theme from [contracts/DESIGN.md](../contracts/DESIGN.md) (`GoSafeColors`, `GoSafeType`, `goSafeTheme`) |
 | `lib/features/trip/trip_screen.dart` | The ride: start, consent, recording, listening, every response, and the upload decision at the end |
 | `lib/features/safety/are_you_ok.dart` | All the wording (`SafetyText`), the consent prompt and the "Are you okay?" dialog |
 | `lib/engine/safety_engine.dart` | The 30-second window, the decision rules, and `Marker` |

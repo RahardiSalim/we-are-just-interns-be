@@ -16,6 +16,7 @@ Follow the root [CLAUDE.md](../CLAUDE.md) rules. How the app works today, step b
 - Built: anonymous sign-in (no login screen), Start ride with the consumer's consent prompt (the driver's consent is their Safe Ride setting), microphone recording of the whole ride (`lib/services/recorder.dart`), the decision engine, kind warnings, high flags sent at once with "Are you okay?", SOS / "I feel unsafe", and after a high or SOS ride the full recording uploaded with markers (otherwise deleted).
 - Temporary: speech input is `lib/services/mock_listener.dart` (a scripted conversation); the classifier is `KeywordClassifier`. Swap in sherpa_onnx (VAD + Whisper) and IndoBERT behind the same interfaces.
 - Not built yet: background recording (foreground service), encryption on the phone, FCM.
+- Style: only the tokens in `lib/theme.dart` (from [contracts/DESIGN.md](../contracts/DESIGN.md)); no raw colours or sizes in feature code. Safety colours mean the same as on the dashboard.
 - All user-facing wording lives in `SafetyText` (`lib/features/safety/are_you_ok.dart`): short, caring, never alarming. Never show messages as bottom snackbars: nothing may cover the SOS button.
 - Firebase points at the local emulators (`USE_EMULATORS`, default true; `EMULATOR_HOST` defaults to 10.0.2.2 on Android, 127.0.0.1 on web).
 
