@@ -24,6 +24,8 @@ Cost: Cloud Run free tier covers a 2 GiB instance for roughly 62 h/month if it s
 
 ## On-device listening (mobile)
 
+How the app implements this, step by step (window, classifier scoring, decision rules, screens, payloads): [mobile/README.md](../mobile/README.md).
+
 Agreed 2026-11-26. **The mobile app is the core:** everything from speech-to-text to flagging and responding runs on the phone. The backend only receives reports, escalates them, and serves the agent dashboard.
 
 **Who records.** Rider and driver both consent at trip start, and **both phones** record for the whole trip. Recording on both means the victim's copy survives if the other person deletes the app. Without both consents nothing is recorded.

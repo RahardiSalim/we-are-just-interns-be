@@ -5,6 +5,7 @@ Ride-safety system for GoRide/GoCar: rider and driver phones listen during the t
 Read before writing code:
 - [contracts/ARCHITECTURE.md](contracts/ARCHITECTURE.md): stack, API contract, incident lifecycle, deployment, phases
 - [contracts/firestore-schema.md](contracts/firestore-schema.md): collections, fields, enums
+- [mobile/README.md](mobile/README.md): how the mobile app's logic works (the core of the product)
 - `contracts/openapi.json`: exported from FastAPI (`backend/scripts/export_openapi.py`), committed
 
 | Folder | App | Deploys to |

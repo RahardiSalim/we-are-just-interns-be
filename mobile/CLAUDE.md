@@ -2,7 +2,7 @@
 
 Flutter app, Android only, for riders and drivers. Both phones listen for the whole trip, transcribe and classify on the phone, show warnings, send automatic reports at "high", and keep encrypted audio for 7 days. SOS / "I feel unsafe" are always available.
 
-Follow the root [CLAUDE.md](../CLAUDE.md) rules. The design is in [contracts/ARCHITECTURE.md](../contracts/ARCHITECTURE.md), section "On-device listening": read it before touching recording, models or storage.
+Follow the root [CLAUDE.md](../CLAUDE.md) rules. How the app works today, step by step: [README.md](README.md); keep it in sync when you change the engine, screens or payloads. The design is in [contracts/ARCHITECTURE.md](../contracts/ARCHITECTURE.md), section "On-device listening": read it before touching recording, models or storage.
 
 - Stack: Flutter (Dart), firebase_auth, cloud_firestore (reads only), firebase_messaging, `sherpa_onnx` (Silero VAD + Whisper), ONNX Runtime (IndoBERT).
 - Layout: `lib/features/trip/`, `lib/features/safety/` (warning, "Are you OK?", report), `lib/services/` (API client, auth, listener, encrypted store), `lib/models/` (Dart models generated from `contracts/`).
