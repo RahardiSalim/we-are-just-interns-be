@@ -26,3 +26,6 @@ build/
 *-debug.log
 
 .DS_Store
+
+# android build cache
+.kotlin/

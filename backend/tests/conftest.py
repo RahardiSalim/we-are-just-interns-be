@@ -36,7 +36,7 @@ def db(monkeypatch):
     seed.seed_data()
     pushes: list[tuple[str, dict]] = []
     monkeypatch.setattr(notify, "push", lambda uid, data: pushes.append((uid, data)))
-    monkeypatch.setattr(storage, "signed_url", lambda path, method: f"https://signed.test/{method}/{path}")
+    monkeypatch.setattr(storage, "signed_url", lambda path, method, *_: f"https://signed.test/{method}/{path}")
     from app.core.firebase import db as client
 
     c = client()

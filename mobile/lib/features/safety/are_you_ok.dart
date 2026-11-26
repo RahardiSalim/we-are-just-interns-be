@@ -1,39 +1,78 @@
 import 'package:material_ui/material_ui.dart';
 
-const _question = 'Are you OK?';
-const _detail = 'GoSafe noticed something that may not be safe. If you need help, a safety agent will contact you.';
+/// Short and caring, never alarming. The words people see when something seems wrong.
+abstract final class SafetyText {
+  static const consentTitle = 'Keep this ride safe?';
+  static const consentBody =
+      "We'd like to record audio during this ride. "
+      "It's only reviewed if something seems wrong, and it's deleted after 7 days.";
+  static const consentYes = 'Yes, record';
+  static const consentNo = 'Not now';
 
-/// Blocking prompt for anyone who can safely tap: the rider, or a GoCar driver.
-/// Returns true for "I'm OK", false for "I need help", null if dismissed.
+  static const warning =
+      'Hey, this conversation seems to be getting uncomfortable. '
+      "Let's keep it kind. If you feel unsafe, we're right here.";
+  static const warningFine = "I'm fine";
+  static const warningReport = 'Report';
+
+  static const askTitle = 'Are you okay?';
+  static const askBody =
+      "Something didn't sound right, so we've let our safety team know. "
+      'Tap if you need help.';
+  static const askOk = "I'm okay";
+  static const askHelp = 'I need help';
+
+  static const helpSent =
+      "We're on it. Our safety team will contact you right away.";
+  static const reportSent =
+      'Thanks for telling us. Our safety team will look into it.';
+  static const okThanks =
+      "Glad you're okay. We're still here if anything changes.";
+}
+
+/// Returns true for "I'm okay", false for "I need help", null if dismissed.
 Future<bool?> askAreYouOk(BuildContext context) => showDialog<bool>(
+  context: context,
+  builder: (context) => AlertDialog(
+    icon: const Icon(Icons.favorite),
+    title: const Text(SafetyText.askTitle),
+    content: const Text(SafetyText.askBody),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context, true),
+        child: const Text(SafetyText.askOk),
+      ),
+      FilledButton(
+        style: FilledButton.styleFrom(
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ),
+        onPressed: () => Navigator.pop(context, false),
+        child: const Text(SafetyText.askHelp),
+      ),
+    ],
+  ),
+);
+
+/// The consent prompt, shown when the ride starts. Only the rider sees it:
+/// the driver chose in their own settings (that choice is their Safe Ride badge).
+Future<bool> askConsent(BuildContext context) async =>
+    await showDialog<bool>(
       context: context,
+      barrierDismissible: false,
       builder: (context) => AlertDialog(
-        title: const Text(_question),
-        content: const Text(_detail),
+        icon: const Icon(Icons.mic),
+        title: const Text(SafetyText.consentTitle),
+        content: const Text(SafetyText.consentBody),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text("I'm OK")),
-          FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+          TextButton(
             onPressed: () => Navigator.pop(context, false),
-            child: const Text('I need help'),
+            child: const Text(SafetyText.consentNo),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(SafetyText.consentYes),
           ),
         ],
       ),
-    );
-
-/// Non-blocking version for a GoRide driver, who can't tap while riding: it never demands an answer.
-class AreYouOkBanner extends StatelessWidget {
-  const AreYouOkBanner({super.key, required this.onAnswer});
-
-  final void Function(bool ok) onAnswer;
-
-  @override
-  Widget build(BuildContext context) => MaterialBanner(
-        leading: const Icon(Icons.health_and_safety),
-        content: const Text('$_question Answer when you have stopped.'),
-        actions: [
-          TextButton(onPressed: () => onAnswer(true), child: const Text("I'm OK")),
-          TextButton(onPressed: () => onAnswer(false), child: const Text('I need help')),
-        ],
-      );
-}
+    ) ??
+    false;

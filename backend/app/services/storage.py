@@ -15,8 +15,8 @@ def upload_method() -> str:
     return "POST" if config.EMULATOR else "PUT"
 
 
-def signed_url(path: str, method: str) -> str:
-    """10-minute V4 signed URL for a clip. PUT to upload (audio/wav), GET to play.
+def signed_url(path: str, method: str, content_type: str = "audio/wav") -> str:
+    """10-minute V4 signed URL for audio. PUT to upload (send the same Content-Type), GET to play.
 
     Needs the Cloud Run service account with "Service Account Token Creator" on itself;
     signing goes through IAM, so no key file is involved.
@@ -35,7 +35,7 @@ def signed_url(path: str, method: str) -> str:
         version="v4",
         expiration=timedelta(minutes=10),
         method=method,
-        content_type="audio/wav" if method == "PUT" else None,
+        content_type=content_type if method == "PUT" else None,
         service_account_email=creds.service_account_email,
         access_token=creds.token,
     )

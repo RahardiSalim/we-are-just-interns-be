@@ -4,65 +4,68 @@ import 'package:material_ui/material_ui.dart';
 
 import '../../engine/safety_engine.dart';
 import '../../services/api.dart';
+import '../../services/recorder.dart';
 import '../safety/are_you_ok.dart';
 
-/// One trip, as rider or driver: consent, order ID, listening, and every safety response.
+typedef TripInfo = ({bool riderConsent, bool driverConsent});
+
+/// The whole ride: consent, recording, listening, every safety response, and what happens afterwards.
 /// The phone decides (SafetyEngine); the backend only receives reports.
 class TripScreen extends StatefulWidget {
   const TripScreen({
     super.key,
     required this.api,
-    required this.role,
+    required this.recorder,
     required this.listen,
     required this.tripInfo,
     required this.checkins,
-    this.onSignOut,
     this.engine,
   });
 
   final Api api;
-  final String role; // rider | driver
-  /// Finished utterances from speech-to-text (mocked for now).
+  final TripRecorder recorder;
+
+  /// Finished utterances from speech-to-text. Mocked until VAD + Whisper are ready.
   final Stream<String> Function() listen;
-  /// The trip as the backend stored it (null if it doesn't exist). Drivers join by order ID.
+
+  /// Both consents as the backend stored them for the trip.
   final Future<TripInfo?> Function(String tripId) tripInfo;
+
   /// IDs of this user's unanswered backend check-ins (after an "I feel unsafe" press).
   final Stream<List<String>> checkins;
-  final VoidCallback? onSignOut;
   final SafetyEngine Function()? engine;
 
   @override
   State<TripScreen> createState() => _TripScreenState();
 }
 
-enum _Prompt { none, warning, areYouOkBanner }
-
-typedef TripInfo = ({String mode, bool bothConsented});
+/// Only a ride with a high flag or an SOS sends its full recording; anything less stays private.
+const uploadWhen = {'high', 'sos'};
 
 class _TripScreenState extends State<TripScreen> {
-  final _orderId = TextEditingController();
-  String _mode = 'goride';
-  bool _consent = false;
   String? _tripId;
   bool _recording = false;
+  bool? _driverSafeRide;
   bool? _backendUp;
-  String? _error;
+  bool _busy = false;
+  bool _warning = false;
+  String? _notice;
+  String? _message;
   final _heard = <String>[];
+  final _markers = <Marker>[];
+  DateTime? _rideStart;
   Decision? _last;
-  _Prompt _prompt = _Prompt.none;
   late SafetyEngine _engine;
   StreamSubscription<String>? _listening;
   StreamSubscription<List<String>>? _checkinSub;
   final _answered = <String>{};
 
-  bool get _isRider => widget.role == 'rider';
-  // A GoRide driver can't tap while riding: never block their screen.
-  bool get _canBlock => _isRider || _mode == 'gocar';
-
   @override
   void initState() {
     super.initState();
-    widget.api.health().then((up) => mounted ? setState(() => _backendUp = up) : null);
+    widget.api.health().then(
+      (up) => mounted ? setState(() => _backendUp = up) : null,
+    );
     _checkinSub = widget.checkins.listen(_onCheckins);
   }
 
@@ -73,47 +76,81 @@ class _TripScreenState extends State<TripScreen> {
     super.dispose();
   }
 
-  Future<void> _run(Future<void> Function() action) async {
+  // Shown at the top, never as a snackbar: nothing may ever cover the SOS button.
+  void _say(String text) => setState(() => _message = text);
+
+  Future<void> _guard(Future<void> Function() action) async {
     try {
       await action();
-      if (mounted) setState(() => _error = null);
     } catch (e) {
-      if (mounted) setState(() => _error = '$e');
+      if (mounted) setState(() => _notice = 'Something went wrong: $e');
     }
   }
 
-  void _snack(String text) => ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(text)));
+  Duration get _sinceStart => _rideStart == null
+      ? Duration.zero
+      : DateTime.now().difference(_rideStart!);
 
-  Future<void> _setConsent(bool on) => _run(() async {
-        await widget.api.setConsent(on);
-        setState(() => _consent = on);
+  Future<void> _startRide() async {
+    final consent = await askConsent(context);
+    setState(() => _busy = true);
+    await _guard(() async {
+      final tripId = await widget.api.startTrip(riderConsent: consent);
+      final trip = await widget.tripInfo(tripId);
+      final both = trip != null && trip.riderConsent && trip.driverConsent;
+      // Nothing is recorded unless the rider agreed now and the driver opted in beforehand.
+      final micOn = both && await widget.recorder.start();
+      _engine =
+          (widget.engine ??
+          () => SafetyEngine(classifier: KeywordClassifier()))();
+      if (micOn) _listening = widget.listen().listen(_onHeard);
+      setState(() {
+        _tripId = tripId;
+        _recording = micOn;
+        _driverSafeRide = trip?.driverConsent;
+        _rideStart = DateTime.now();
+        _notice = both && !micOn
+            ? 'Allow microphone access to record your rides.'
+            : null;
+        _heard.clear();
+        _markers.clear();
       });
+    });
+    if (mounted) setState(() => _busy = false);
+  }
 
-  Future<void> _start() => _run(() async {
-        final orderId = _orderId.text.trim();
-        if (_isRider) await widget.api.startTrip(orderId, _mode);
-        final trip = await widget.tripInfo(orderId);
-        if (trip == null) throw 'No trip for order $orderId yet. Ask the rider to start it.';
-        _engine = (widget.engine ?? () => SafetyEngine(classifier: KeywordClassifier()))();
-        // Nothing is recorded unless rider and driver both agreed.
-        if (trip.bothConsented) _listening = widget.listen().listen(_onHeard);
-        setState(() {
-          _tripId = orderId;
-          _mode = trip.mode;
-          _recording = trip.bothConsented;
-          _heard.clear();
-        });
+  Future<void> _endRide() async {
+    setState(() => _busy = true);
+    await _guard(() async {
+      _listening?.cancel(); // nothing to wait for; stop hearing before the ride closes
+      final tripId = _tripId!;
+      await widget.api.endTrip(tripId);
+      if (_recording) {
+        if (_markers.any((m) => uploadWhen.contains(m.kind))) {
+          // The full ride goes to the safety team, with every moment to check, then leaves the phone.
+          final rec = await widget.recorder.stop();
+          if (rec != null) {
+            await widget.api.uploadRecording(tripId, rec, List.of(_markers));
+          }
+          if (mounted) {
+            _say('Ride ended. The recording was sent to our safety team.');
+          }
+        } else {
+          await widget.recorder.discard();
+          if (mounted) {
+            _say(
+              'Ride ended. Nothing needed checking, so the recording was deleted.',
+            );
+          }
+        }
+      }
+      setState(() {
+        _tripId = _last = null;
+        _recording = _warning = false;
       });
-
-  Future<void> _end() => _run(() async {
-        await _listening?.cancel();
-        if (_isRider) await widget.api.endTrip(_tripId!);
-        setState(() {
-          _tripId = _last = null;
-          _prompt = _Prompt.none;
-          _recording = false;
-        });
-      });
+    });
+    if (mounted) setState(() => _busy = false);
+  }
 
   void _onHeard(String text) {
     final d = _engine.hear(text);
@@ -123,156 +160,220 @@ class _TripScreenState extends State<TripScreen> {
     });
     switch (d.action) {
       case SafetyAction.warn:
-        setState(() => _prompt = _Prompt.warning);
+        _markers.add(
+          Marker(_sinceStart, 'warning', verdict: d.verdict, text: text),
+        );
+        setState(() => _warning = true);
       case SafetyAction.high:
-        _run(() async {
+        _markers.add(
+          Marker(_sinceStart, 'high', verdict: d.verdict, text: text),
+        );
+        // The flag goes to the safety team at once, as an escalated case.
+        _guard(() async {
           await widget.api.report(_tripId!, 'auto', d);
         });
-        _askAreYouOk((ok) => ok ? null : _report('sos'));
+        _askAreYouOk((ok) => ok ? _say(SafetyText.okThanks) : _report('sos'));
       case SafetyAction.none:
         break;
     }
   }
 
-  /// Rider / GoCar driver: a dialog. GoRide driver: a banner that never demands an answer.
-  void _askAreYouOk(void Function(bool ok) answer) {
-    if (_canBlock) {
+  void _askAreYouOk(void Function(bool ok) answer) =>
       askAreYouOk(context).then((ok) => ok == null ? null : answer(ok));
-    } else {
-      setState(() => _prompt = _Prompt.areYouOkBanner);
-      _bannerAnswer = answer;
-    }
-  }
-
-  void Function(bool ok)? _bannerAnswer;
 
   void _onCheckins(List<String> ids) {
     for (final id in ids.where(_answered.add)) {
-      _askAreYouOk((ok) => _run(() => widget.api.replyCheckin(id, ok)));
+      _askAreYouOk(
+        (ok) => _guard(() async {
+          await widget.api.replyCheckin(id, ok);
+          if (mounted) _say(ok ? SafetyText.okThanks : SafetyText.helpSent);
+        }),
+      );
     }
   }
 
-  Future<void> _report(String trigger) => _run(() async {
-        await widget.api.report(_tripId!, trigger, _last);
-        _snack(trigger == 'sos' ? 'SOS sent. A safety agent will contact you.' : 'Report sent. Thank you for telling us.');
-      });
+  Future<void> _report(String trigger) => _guard(() async {
+    _markers.add(Marker(_sinceStart, trigger, verdict: _last?.verdict));
+    await widget.api.report(_tripId!, trigger, _last);
+    if (mounted) {
+      _say(trigger == 'sos' ? SafetyText.helpSent : SafetyText.reportSent);
+    }
+  });
 
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
-    final onTrip = _tripId != null;
+    final text = Theme.of(context).textTheme;
+    final onRide = _tripId != null;
 
     return Scaffold(
       appBar: AppBar(
-        title: Text('GoSafe · ${_isRider ? 'Rider' : 'Driver'}'),
+        title: const Text('GoSafe'),
         actions: [
-          Chip(label: Text(switch (_backendUp) { null => 'Checking…', true => 'Online', false => 'Offline' })),
-          if (widget.onSignOut != null) IconButton(onPressed: widget.onSignOut, icon: const Icon(Icons.logout), tooltip: 'Sign out'),
+          Padding(
+            padding: const EdgeInsets.only(right: 12),
+            child: Chip(
+              label: Text(switch (_backendUp) {
+                null => 'Checking…',
+                true => 'Online',
+                false => 'Offline',
+              }),
+            ),
+          ),
         ],
       ),
       body: SafeArea(
+        // Everything scrolls except the bottom buttons, so SOS is always on screen.
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            if (onTrip && !_recording)
-              const MaterialBanner(
-                leading: Icon(Icons.mic_off),
-                content: Text('Not recording: both rider and driver must allow it. SOS still works.'),
-                actions: [SizedBox.shrink()],
-              ),
-            if (_recording)
-              const MaterialBanner(
-                leading: Icon(Icons.mic, color: Colors.red),
-                content: Text('Recording on. Audio stays encrypted on this phone for 7 days and is only sent if a problem is reported.'),
-                actions: [SizedBox.shrink()],
-              ),
-            if (_prompt == _Prompt.warning)
-              MaterialBanner(
-                backgroundColor: colors.tertiaryContainer,
-                leading: const Icon(Icons.warning_amber),
-                content: const Text(
-                  'This conversation seems uncomfortable. Please keep it respectful. '
-                  'If you feel unsafe, tell us.',
-                ),
-                actions: [
-                  TextButton(onPressed: () => setState(() => _prompt = _Prompt.none), child: const Text('Dismiss')),
-                  TextButton(
-                    onPressed: () {
-                      setState(() => _prompt = _Prompt.none);
-                      _report('manual_unsafe');
-                    },
-                    child: const Text('Report'),
-                  ),
+            Expanded(
+              child: ListView(
+                children: [
+                  if (onRide)
+                    MaterialBanner(
+                      leading: Icon(
+                        _recording ? Icons.mic : Icons.mic_off,
+                        color: _recording ? Colors.red : null,
+                      ),
+                      content: Text(
+                        _recording
+                            ? 'Recording on. Only shared if something serious happens.'
+                            : 'Not recording this ride. SOS still works.',
+                      ),
+                      actions: const [SizedBox.shrink()],
+                    ),
+                  if (_warning)
+                    MaterialBanner(
+                      backgroundColor: colors.tertiaryContainer,
+                      leading: const Icon(Icons.volunteer_activism),
+                      content: const Text(SafetyText.warning),
+                      actions: [
+                        TextButton(
+                          onPressed: () => setState(() => _warning = false),
+                          child: const Text(SafetyText.warningFine),
+                        ),
+                        TextButton(
+                          onPressed: () {
+                            setState(() => _warning = false);
+                            _report('manual_unsafe');
+                          },
+                          child: const Text(SafetyText.warningReport),
+                        ),
+                      ],
+                    ),
+                  if (_message != null)
+                    Card(
+                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                      child: ListTile(
+                        leading: const Icon(Icons.favorite_outline),
+                        title: Text(_message!),
+                        trailing: IconButton(
+                          icon: const Icon(Icons.close),
+                          tooltip: 'Dismiss',
+                          onPressed: () => setState(() => _message = null),
+                        ),
+                      ),
+                    ),
+                  if (_notice != null)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        _notice!,
+                        style: TextStyle(color: colors.error),
+                      ),
+                    ),
+                  if (onRide) ...[
+                    ListTile(
+                      leading: Icon(
+                        _driverSafeRide == true
+                            ? Icons.verified_user
+                            : Icons.shield_outlined,
+                      ),
+                      title: Text('Ride $_tripId'),
+                      subtitle: Text(
+                        _driverSafeRide == true
+                            ? 'Your driver has Safe Ride on'
+                            : "Your driver hasn't turned on Safe Ride",
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Text(
+                        'Heard (temporary speech-to-text)',
+                        style: text.labelMedium,
+                      ),
+                    ),
+                    for (final (i, t) in _heard.indexed)
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          t,
+                          key: ValueKey('heard-$i'),
+                          style: text.bodySmall,
+                        ),
+                      ),
+                  ] else
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(24, 96, 24, 24),
+                      child: Column(
+                        spacing: 16,
+                        children: [
+                          Icon(Icons.shield, size: 64, color: colors.primary),
+                          Text(
+                            'Ride with peace of mind',
+                            style: text.titleLarge,
+                          ),
+                          const Text(
+                            'GoSafe listens for trouble during your ride and gets help fast if you need it.',
+                            textAlign: TextAlign.center,
+                          ),
+                        ],
+                      ),
+                    ),
                 ],
               ),
-            if (_prompt == _Prompt.areYouOkBanner)
-              AreYouOkBanner(onAnswer: (ok) {
-                setState(() => _prompt = _Prompt.none);
-                _bannerAnswer?.call(ok);
-              }),
-            if (_error != null)
-              Padding(padding: const EdgeInsets.all(16), child: Text(_error!, style: TextStyle(color: colors.error))),
-            SwitchListTile(
-              title: const Text('Allow audio recording during trips'),
-              subtitle: const Text('Both rider and driver must agree.'),
-              value: _consent,
-              onChanged: onTrip ? null : _setConsent,
             ),
-            if (!onTrip) ...[
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: TextField(controller: _orderId, decoration: const InputDecoration(labelText: 'GoJek order ID')),
-              ),
-              if (_isRider)
-                Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: SegmentedButton<String>(
-                    segments: const [ButtonSegment(value: 'goride', label: Text('GoRide')), ButtonSegment(value: 'gocar', label: Text('GoCar'))],
-                    selected: {_mode},
-                    onSelectionChanged: (s) => setState(() => _mode = s.first),
-                  ),
-                ),
-            ],
             Padding(
               padding: const EdgeInsets.all(16),
-              child: FilledButton(
-                onPressed: onTrip ? _end : (_consent ? _start : null),
-                child: Text(onTrip ? 'End trip' : (_isRider ? 'Start trip' : 'Join trip')),
-              ),
-            ),
-            if (onTrip)
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  children: [
-                    Text('Heard (mock speech-to-text)', style: Theme.of(context).textTheme.labelMedium),
-                    for (final (i, t) in _heard.indexed)
-                      Text(t, key: ValueKey('heard-$i'), style: Theme.of(context).textTheme.bodySmall),
-                  ],
-                ),
-              )
-            else
-              const Spacer(),
-            if (onTrip)
-              Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  spacing: 12,
-                  children: [
-                    OutlinedButton(onPressed: () => _report('manual_unsafe'), child: const Text('I feel unsafe')),
-                    FilledButton(
+              child: onRide
+                  ? Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      spacing: 12,
+                      children: [
+                        OutlinedButton(
+                          onPressed: () => _report('manual_unsafe'),
+                          child: const Text('I feel unsafe'),
+                        ),
+                        FilledButton(
+                          style: FilledButton.styleFrom(
+                            backgroundColor: colors.error,
+                            foregroundColor: colors.onError,
+                            minimumSize: const Size.fromHeight(64),
+                          ),
+                          onPressed: () => _report('sos'),
+                          child: const Text(
+                            'SOS',
+                            style: TextStyle(
+                              fontSize: 22,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                        ),
+                        TextButton(
+                          onPressed: _busy ? null : _endRide,
+                          child: const Text('End ride'),
+                        ),
+                      ],
+                    )
+                  : FilledButton(
                       style: FilledButton.styleFrom(
-                        backgroundColor: colors.error,
-                        foregroundColor: colors.onError,
-                        minimumSize: const Size.fromHeight(64),
+                        minimumSize: const Size.fromHeight(56),
                       ),
-                      onPressed: () => _report('sos'),
-                      child: const Text('SOS', style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold)),
+                      onPressed: _busy ? null : _startRide,
+                      child: const Text('Start ride'),
                     ),
-                  ],
-                ),
-              ),
+            ),
           ],
         ),
       ),

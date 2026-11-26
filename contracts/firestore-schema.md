@@ -23,7 +23,8 @@ Read by: owner, agents.
 | `riderId`, `driverId` | uid |
 | `mode` | `goride` \| `gocar` |
 | `status` | `active` \| `ended` |
-| `consent` | `{ rider: bool, driver: bool }` |
+| `consent` | `{ rider: bool, driver: bool }`: rider from the consent prompt, driver from their Safe Ride setting (`users.audioConsent`) |
+| `recording` | after a flagged ride: `{ path, contentType, durationSec, markers: [ { at, kind: warning \| high \| sos \| manual_unsafe, label, score, text } ], status: awaiting_upload \| uploaded, uploadedBy, createdAt, uploadedAt }` |
 | `startedAt`, `endedAt` | timestamp |
 
 Read by: rider, driver, agents.
@@ -34,7 +35,7 @@ Read by: rider, driver, agents.
 
 | Field | Type |
 |---|---|
-| `type` | `sos` \| `manual_unsafe` \| `warning` (planned) |
+| `type` | `sos` \| `manual_unsafe` |
 | `ts` | timestamp |
 | `data` | map (for `warning`: `{label, score, by}`) |
 
@@ -81,32 +82,18 @@ Read by: that user, agents.
 |---|---|
 | `agentId` | uid |
 | `incidentId` | string |
-| `action` | `view_clip` \| `decide` \| `appeal_review` |
+| `action` | `view_clip` \| `view_recording` \| `decide` \| `appeal_review` |
+| `tripId` | string, for `view_recording` |
 | `ts` | timestamp |
 
 Read by: agents. Written by: backend only.
-
-## audioRequests/{requestId} (planned)
-
-An agent asking a phone for audio it still holds (see ARCHITECTURE.md "On-device listening").
-
-| Field | Type |
-|---|---|
-| `incidentId`, `tripId` | string |
-| `userId` | uid of the phone's owner (one request per phone) |
-| `requestedBy` | agent uid |
-| `status` | `pending` \| `uploaded` \| `expired` (the phone had already deleted it, or never came online) |
-| `clipPaths` | Cloud Storage paths, once uploaded |
-| `requestedAt`, `uploadedAt` | timestamp |
-
-Read by: agents; the phone owner reads their own. Written by: backend.
 
 ## Retention
 
 - Firestore TTL policy on `incidents.deleteAt`.
 - Cloud Storage lifecycle rule deletes clips after 7 days.
 - Open cases push `deleteAt` forward.
-- On the phones (not Firestore): all trip audio and transcripts, encrypted, deleted after 7 days.
+- On the phone: the ride recording is deleted after the ride unless it was flagged high or had an SOS, in which case it's uploaded and then deleted from the phone.
 
 ## Stretch
 

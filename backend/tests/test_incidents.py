@@ -13,7 +13,7 @@ HARASSMENT = [
 
 def start_trip(client, login, mode="goride") -> str:
     login("rider1")
-    return client.post("/trips", json={"orderId": "GR-2001", "mode": mode}).json()["tripId"]
+    return client.post("/trips", json={"orderId": "GR-2001", "mode": mode, "riderConsent": True}).json()["tripId"]
 
 
 def report(client, trip_id, trigger="sos", **extra) -> str:
@@ -66,8 +66,7 @@ def test_device_label_is_trusted_over_the_keyword_filter(client, login, db):
 
 def test_no_upload_without_both_consents(client, login, db):
     login("rider1")
-    client.post("/me/consent", json={"audioConsent": False})
-    trip_id = client.post("/trips", json={"orderId": "GR-2001"}).json()["tripId"]
+    trip_id = client.post("/trips", json={"orderId": "GR-2001", "riderConsent": False}).json()["tripId"]
     created = client.post("/incidents", json={"tripId": trip_id, "trigger": "sos", **WINDOW}).json()
     assert created["uploadUrl"] is None
     assert db.document("incidents", created["incidentId"]).get().to_dict()["clipPath"] is None

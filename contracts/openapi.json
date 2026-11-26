@@ -257,6 +257,164 @@
         }
       }
     },
+    "/trips/{trip_id}/recording": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Start Recording Upload",
+        "description": "After the ride: the full audio plus the moments to check. Returns where to upload it.",
+        "operationId": "start_recording_upload_trips__trip_id__recording_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Recording"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Start Recording Upload Trips  Trip Id  Recording Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trips/{trip_id}/recording/done": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Finish Recording Upload",
+        "operationId": "finish_recording_upload_trips__trip_id__recording_done_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Finish Recording Upload Trips  Trip Id  Recording Done Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trips/{trip_id}/recording-url": {
+      "get": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Recording Url",
+        "operationId": "recording_url_trips__trip_id__recording_url_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Recording Url Trips  Trip Id  Recording Url Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/incidents": {
       "post": {
         "tags": [
@@ -812,6 +970,108 @@
         "type": "object",
         "title": "HTTPValidationError"
       },
+      "Marker": {
+        "properties": {
+          "at": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "At"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "warning",
+              "high",
+              "sos",
+              "manual_unsafe"
+            ],
+            "title": "Kind"
+          },
+          "label": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "uncomfortable",
+                  "sexual_harassment",
+                  "threat"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Label"
+          },
+          "score": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Score"
+          },
+          "text": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "kind"
+        ],
+        "title": "Marker",
+        "description": "A moment in the full recording an agent should check."
+      },
+      "Recording": {
+        "properties": {
+          "durationSec": {
+            "type": "number",
+            "maximum": 21600.0,
+            "minimum": 0.0,
+            "title": "Durationsec"
+          },
+          "contentType": {
+            "type": "string",
+            "enum": [
+              "audio/mp4",
+              "audio/ogg",
+              "audio/wav"
+            ],
+            "title": "Contenttype"
+          },
+          "markers": {
+            "items": {
+              "$ref": "#/components/schemas/Marker"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Markers"
+          }
+        },
+        "type": "object",
+        "required": [
+          "durationSec",
+          "contentType",
+          "markers"
+        ],
+        "title": "Recording"
+      },
       "Reply": {
         "properties": {
           "answer": {
@@ -832,8 +1092,15 @@
       "StartTrip": {
         "properties": {
           "orderId": {
-            "type": "string",
-            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9_-]{1,64}$"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Orderid"
           },
           "mode": {
@@ -844,11 +1111,15 @@
             ],
             "title": "Mode",
             "default": "goride"
+          },
+          "riderConsent": {
+            "type": "boolean",
+            "title": "Riderconsent"
           }
         },
         "type": "object",
         "required": [
-          "orderId"
+          "riderConsent"
         ],
         "title": "StartTrip"
       },

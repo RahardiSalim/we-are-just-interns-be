@@ -15,6 +15,23 @@ class Line {
   Map<String, Object> toJson() => {'start': start, 'end': end, 'text': text};
 }
 
+/// A moment in the ride recording an agent should check.
+class Marker {
+  const Marker(this.at, this.kind, {this.verdict, this.text});
+  final Duration at; // from the start of the recording
+  final String kind; // warning | high | sos | manual_unsafe
+  final Verdict? verdict;
+  final String? text;
+
+  Map<String, Object?> toJson() => {
+    'at': at.inMilliseconds / 1000,
+    'kind': kind,
+    if (verdict != null) 'label': verdict!.label.api,
+    if (verdict != null) 'score': verdict!.score,
+    'text': ?text,
+  };
+}
+
 class Decision {
   const Decision(this.action, this.verdict, this.window);
   final SafetyAction action;
@@ -59,7 +76,8 @@ class SafetyEngine {
       for (final (i, h) in _heard.indexed)
         Line(
           h.$1.difference(t0).inMilliseconds / 1000,
-          h.$1.difference(t0).inMilliseconds / 1000 + length.inMilliseconds / 1000,
+          h.$1.difference(t0).inMilliseconds / 1000 +
+              length.inMilliseconds / 1000,
           h.$2,
           flagged: verdict.flagged[i],
         ),
@@ -68,12 +86,16 @@ class SafetyEngine {
   }
 
   SafetyAction _decide(Verdict v, DateTime now) {
-    if (_reported) return SafetyAction.none; // one automatic report per trip; the case is with an agent
+    if (_reported) {
+      return SafetyAction
+          .none; // one automatic report per trip; the case is with an agent
+    }
     if (_harmful.contains(v.label) && v.score >= highAt) {
       _reported = true;
       return SafetyAction.high;
     }
-    final cooling = _lastWarning != null && now.difference(_lastWarning!) < warnCooldown;
+    final cooling =
+        _lastWarning != null && now.difference(_lastWarning!) < warnCooldown;
     if (v.label != Label.normal && v.score >= warnAt && !cooling) {
       _lastWarning = now;
       return SafetyAction.warn;
