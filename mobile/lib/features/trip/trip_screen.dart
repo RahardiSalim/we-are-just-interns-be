@@ -51,7 +51,7 @@ class _TripScreenState extends State<TripScreen> {
   bool _warning = false;
   String? _notice;
   String? _message;
-  final _heard = <String>[];
+  final _heard = <(Duration, String)>[];
   final _markers = <Marker>[];
   DateTime? _rideStart;
   Decision? _last;
@@ -130,7 +130,12 @@ class _TripScreenState extends State<TripScreen> {
           // The full ride goes to the safety team, with every moment to check, then leaves the phone.
           final rec = await widget.recorder.stop();
           if (rec != null) {
-            await widget.api.uploadRecording(tripId, rec, List.of(_markers));
+            await widget.api.uploadRecording(
+              tripId,
+              rec,
+              List.of(_markers),
+              List.of(_heard),
+            );
           }
           if (mounted) {
             _say('Ride ended. The recording was sent to our safety team.');
@@ -155,7 +160,7 @@ class _TripScreenState extends State<TripScreen> {
   void _onHeard(String text) {
     final d = _engine.hear(text);
     setState(() {
-      _heard.add(text);
+      _heard.add((_sinceStart, text));
       _last = d;
     });
     switch (d.action) {
@@ -304,7 +309,7 @@ class _TripScreenState extends State<TripScreen> {
                         style: text.labelMedium,
                       ),
                     ),
-                    for (final (i, t) in _heard.indexed)
+                    for (final (i, (_, t)) in _heard.indexed)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
                         child: Text(

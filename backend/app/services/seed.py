@@ -1,8 +1,17 @@
-"""Demo data: users docs, one trip with events, one escalated incident. Fixed ids so re-seeding overwrites."""
+"""Demo data: users, one flagged ride with its real recording, and its escalated incident.
+Fixed ids so re-seeding overwrites."""
 
+import json
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 from app.core.firebase import db
+from app.services import storage
+from app.services.review import review_recording
+
+# Local runs read contracts/fixtures; the deploy workflow copies it to backend/fixtures for the image.
+_here = Path(__file__).resolve().parents[2]
+FIXTURES = _here / "fixtures" if (_here / "fixtures").exists() else _here.parent / "contracts" / "fixtures"
 
 USERS = [
     {"uid": "rider1", "role": "rider", "displayName": "Rina (rider)"},
@@ -30,11 +39,14 @@ def seed_data() -> dict:
             "role": u["role"],
             "displayName": u["displayName"],
             "fcmToken": None,
-            "audioConsent": True,
+            # A driver's recording consent is their Safe Ride setting.
+            "audioConsent": u.get("safeRideBadge", True),
             "safeRideBadge": u.get("safeRideBadge", False),
         })
 
+    ride = json.loads((FIXTURES / "demo-ride.json").read_text())
     start = now - timedelta(minutes=12)
+    flag_at = start + timedelta(seconds=22)  # the harassment line in demo-ride.m4a
     trip = client.document("trips", "GR-DEMO-1")  # trip ID = GoJek order ID
     batch.set(trip, {
         "riderId": "rider1",
@@ -43,36 +55,49 @@ def seed_data() -> dict:
         "status": "ended",
         "consent": {"rider": True, "driver": True},
         "startedAt": start,
-        "endedAt": now - timedelta(minutes=2),
+        "endedAt": start + timedelta(seconds=ride["durationSec"]),
+        "recording": {
+            "path": "recordings/GR-DEMO-1.m4a",
+            "contentType": ride["contentType"],
+            "durationSec": ride["durationSec"],
+            "markers": ride["markers"],
+            "transcript": ride["transcript"],
+            "status": "uploaded",
+            "uploadedBy": "rider1",
+            "createdAt": now - timedelta(minutes=2),
+            "uploadedAt": now - timedelta(minutes=2),
+        },
     })
-    sos_ts = start + timedelta(minutes=6)
-    batch.set(trip.collection("events").document("sos-1"), {"type": "sos", "ts": sos_ts, "data": {"by": "rider1"}})
 
+    window = [line for line in ride["transcript"] if line["at"] <= 22.0]
+    t0 = window[0]["at"]
     batch.set(client.document("incidents", "demo-incident-1"), {
         "tripId": "GR-DEMO-1",
         "reportedBy": "rider1",
-        "trigger": "sos",
+        "trigger": "auto",
+        "windowStart": start + timedelta(seconds=t0),
+        "windowEnd": flag_at,
         "status": "escalated",
         "severity": "high",
         "label": "sexual_harassment",
-        "score": 0.91,
+        "score": 0.8,
         "transcript": [
-            {"start": 0.0, "end": 4.2, "text": "Mbak, rumahnya di mana? Tinggal sendiri ya?", "flagged": False},
-            {"start": 4.2, "end": 9.8, "text": "Cantik banget sih, mau nggak saya anterin tiap hari?", "flagged": True},
-            {"start": 9.8, "end": 13.5, "text": "Pak, tolong fokus nyetir aja.", "flagged": False},
-            {"start": 13.5, "end": 19.0, "text": "Ayo dong, nanti mampir dulu ke tempat saya.", "flagged": True},
+            {"start": round(line["at"] - t0, 1), "end": round(line["end"] - t0, 1), "text": line["text"],
+             "flagged": line["at"] in (9.8, 22.0, 18.2)}
+            for line in window
         ],
-        "summary": "Penumpang menekan SOS setelah pengemudi berulang kali menanyakan alamat dan mengajak mampir. "
-                   "Penumpang meminta pengemudi fokus berkendara. (Contoh ringkasan untuk demo.)",
-        "clipPath": None,  # shortcut: no sample clip yet; add a recorded one when the team has it
-        "source": "cloud",
+        "summary": "Pemicu: deteksi otomatis di ponsel pada trip GR-DEMO-1. Penilaian otomatis: sexual_harassment (80%).",
+        "clipPath": None,
+        "source": "device",
         "assignedAgent": None,
         "decision": None,
-        "createdAt": sos_ts,
-        "deleteAt": now + timedelta(days=7),
+        "createdAt": flag_at,
+        "deleteAt": now + timedelta(days=30),
     })
 
     batch.commit()
+    storage.upload_bytes("recordings/GR-DEMO-1.m4a", (FIXTURES / "demo-ride.m4a").read_bytes(), ride["contentType"])
+    review_recording("GR-DEMO-1")
     return {"users": len(USERS), "trips": 1, "incidents": 1}
 
 

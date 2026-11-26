@@ -1062,6 +1062,15 @@
             "type": "array",
             "maxItems": 500,
             "title": "Markers"
+          },
+          "transcript": {
+            "items": {
+              "$ref": "#/components/schemas/Utterance"
+            },
+            "type": "array",
+            "maxItems": 5000,
+            "title": "Transcript",
+            "default": []
           }
         },
         "type": "object",
@@ -1183,6 +1192,38 @@
           "type"
         ],
         "title": "TripEvent"
+      },
+      "Utterance": {
+        "properties": {
+          "at": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "At"
+          },
+          "end": {
+            "anyOf": [
+              {
+                "type": "number",
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "End"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "at",
+          "text"
+        ],
+        "title": "Utterance"
       },
       "ValidationError": {
         "properties": {

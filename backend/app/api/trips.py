@@ -2,14 +2,14 @@ import secrets
 from datetime import datetime
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from google.api_core.exceptions import AlreadyExists
 from google.cloud.firestore import SERVER_TIMESTAMP
 from pydantic import BaseModel, Field
 
 from app.core.auth import current_user, require_role
 from app.core.firebase import db
-from app.services import storage
+from app.services import review, storage
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -46,10 +46,17 @@ class Marker(BaseModel):
     text: str | None = Field(None, max_length=2000)
 
 
+class Utterance(BaseModel):
+    at: float = Field(ge=0)  # seconds from the start of the recording
+    end: float | None = Field(None, ge=0)
+    text: str = Field(max_length=2000)
+
+
 class Recording(BaseModel):
     durationSec: float = Field(ge=0, le=6 * 3600)
     contentType: Literal["audio/mp4", "audio/ogg", "audio/wav"]
     markers: list[Marker] = Field(max_length=500)
+    transcript: list[Utterance] = Field([], max_length=5000)  # the phone's speech-to-text for the whole ride
 
 
 def participant_trip(trip_id: str, uid: str) -> dict:
@@ -121,11 +128,12 @@ def start_recording_upload(trip_id: str, body: Recording, user: dict = Depends(c
 
 
 @router.post("/{trip_id}/recording/done")
-def finish_recording_upload(trip_id: str, user: dict = Depends(current_user)) -> dict:
+def finish_recording_upload(trip_id: str, background: BackgroundTasks, user: dict = Depends(current_user)) -> dict:
     trip = participant_trip(trip_id, user["uid"])
     if not trip.get("recording"):
         raise HTTPException(404, "No recording started for this trip")
     db().document("trips", trip_id).update({"recording.status": "uploaded", "recording.uploadedAt": SERVER_TIMESTAMP})
+    background.add_task(review.review_recording, trip_id)  # summary + verified flag for the agent
     return {"status": "uploaded"}
 
 

@@ -29,3 +29,4 @@ build/
 
 # android build cache
 .kotlin/
+backend/fixtures/

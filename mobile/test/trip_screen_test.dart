@@ -15,6 +15,7 @@ class FakeApi extends Api {
   final calls = <String>[];
   final reports = <(String trigger, Decision? evidence)>[];
   List<Marker>? uploadedMarkers;
+  List<String>? uploadedTranscript;
 
   @override
   Future<bool> health() async => true;
@@ -44,9 +45,11 @@ class FakeApi extends Api {
     String tripId,
     Recording rec,
     List<Marker> markers,
+    List<(Duration, String)> transcript,
   ) async {
     calls.add('upload:$tripId:${rec.contentType}');
     uploadedMarkers = markers;
+    uploadedTranscript = [for (final (_, t) in transcript) t];
   }
 
   @override
@@ -237,6 +240,10 @@ void main() {
         'upload:GR-TEST:audio/mp4',
       ]);
       expect(h.api.uploadedMarkers!.map((m) => m.kind), ['warning', 'high']);
+      expect(h.api.uploadedTranscript, [
+        uncomfortable,
+        harassment,
+      ], reason: 'the whole ride, for the AI review');
       expect(h.recorder.state, 'stopped');
     },
   );

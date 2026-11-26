@@ -3,6 +3,7 @@ from datetime import timedelta
 from urllib.parse import quote
 
 import google.auth
+import httpx
 from google.auth.transport.requests import Request
 from firebase_admin import storage
 
@@ -13,6 +14,16 @@ from app.core.firebase import init
 def upload_method() -> str:
     """Real signed URLs take PUT; the Storage emulator's upload API only takes POST."""
     return "POST" if config.EMULATOR else "PUT"
+
+
+def upload_bytes(path: str, data: bytes, content_type: str) -> None:
+    """Server-side upload (seed data). Phones upload through signed URLs instead."""
+    if config.EMULATOR:
+        host = os.getenv("FIREBASE_STORAGE_EMULATOR_HOST", "127.0.0.1:9199")
+        url = f"http://{host}/upload/storage/v1/b/{config.FIREBASE_STORAGE_BUCKET}/o?uploadType=media&name={quote(path, safe='')}"
+        httpx.post(url, content=data, headers={"Content-Type": content_type}).raise_for_status()
+        return
+    storage.bucket(app=init()).blob(path).upload_from_string(data, content_type=content_type)
 
 
 def signed_url(path: str, method: str, content_type: str = "audio/wav") -> str:

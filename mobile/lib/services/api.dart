@@ -101,15 +101,21 @@ class Api {
   }
 
   /// After the ride: the full audio plus the moments an agent should check.
+  /// `transcript`: everything speech-to-text heard, timed from the recording start.
   Future<void> uploadRecording(
     String tripId,
     Recording rec,
     List<Marker> markers,
+    List<(Duration, String)> transcript,
   ) async {
     final target = await _post('/trips/$tripId/recording', {
       'durationSec': rec.length.inMilliseconds / 1000,
       'contentType': rec.contentType,
       'markers': [for (final m in markers) m.toJson()],
+      'transcript': [
+        for (final (at, text) in transcript)
+          {'at': at.inMilliseconds / 1000, 'text': text},
+      ],
     });
     final put =
         http.Request(

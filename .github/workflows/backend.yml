@@ -3,7 +3,7 @@ name: backend
 on:
   push:
     branches: [main]
-    paths: ["backend/**", "firebase/**", ".github/workflows/backend.yml"]
+    paths: ["backend/**", "firebase/**", "contracts/fixtures/**", ".github/workflows/backend.yml"]
   pull_request:
     paths: ["backend/**", "firebase/**"]
 
@@ -30,6 +30,7 @@ jobs:
     permissions: { contents: read, id-token: write }
     steps:
       - uses: actions/checkout@v4
+      - run: cp -r contracts/fixtures backend/fixtures  # demo ride audio for /dev/seed
       # Repo variables to set once: GCP_PROJECT, GCP_WIF_PROVIDER, GCP_DEPLOY_SA (see contracts/ARCHITECTURE.md "On hold").
       - uses: google-github-actions/auth@v2
         with:

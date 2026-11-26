@@ -1,0 +1,58 @@
+{
+  "durationSec": 30.6,
+  "transcript": [
+    {
+      "at": 1.0,
+      "end": 5.1,
+      "text": "Selamat sore Mbak, sesuai aplikasi ya, ke Senayan."
+    },
+    {
+      "at": 6.3,
+      "end": 8.6,
+      "text": "Iya Pak, lewat Sudirman aja."
+    },
+    {
+      "at": 9.8,
+      "end": 12.8,
+      "text": "Mbak kerja di mana? Udah punya pacar belum?"
+    },
+    {
+      "at": 14.0,
+      "end": 17.0,
+      "text": "Hmm, Pak, fokus nyetir aja ya."
+    },
+    {
+      "at": 18.2,
+      "end": 20.8,
+      "text": "Tinggal sendiri ya? Rumahnya di mana?"
+    },
+    {
+      "at": 22.0,
+      "end": 25.7,
+      "text": "Cantik banget sih, nanti mampir ke tempat saya dulu."
+    },
+    {
+      "at": 26.9,
+      "end": 29.4,
+      "text": "Pak, saya mau turun di depan aja."
+    }
+  ],
+  "_note": "Demo ride: macOS 'say' voice Damayanti reading the mobile app's scripted conversation. Times are seconds from the start of demo-ride.m4a.",
+  "contentType": "audio/mp4",
+  "markers": [
+    {
+      "at": 9.8,
+      "kind": "warning",
+      "label": "uncomfortable",
+      "score": 0.65,
+      "text": "Mbak kerja di mana? Udah punya pacar belum?"
+    },
+    {
+      "at": 22.0,
+      "kind": "high",
+      "label": "sexual_harassment",
+      "score": 0.8,
+      "text": "Cantik banget sih, nanti mampir ke tempat saya dulu."
+    }
+  ]
+}

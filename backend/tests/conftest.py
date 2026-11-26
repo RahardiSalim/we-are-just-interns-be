@@ -33,10 +33,12 @@ def login(client):
 def db(monkeypatch):
     """Empty emulator Firestore with the seeded users, and the outside services faked."""
     httpx.delete(f"http://{EMULATOR}/emulator/v1/projects/{config.GCP_PROJECT}/databases/(default)/documents")
-    seed.seed_data()
     pushes: list[tuple[str, dict]] = []
     monkeypatch.setattr(notify, "push", lambda uid, data: pushes.append((uid, data)))
     monkeypatch.setattr(storage, "signed_url", lambda path, method, *_: f"https://signed.test/{method}/{path}")
+    monkeypatch.setattr(storage, "upload_bytes", lambda *_: None)
+    monkeypatch.setattr(config, "LLM_BASE_URL", "")  # never call a real LLM from tests
+    seed.seed_data()
     from app.core.firebase import db as client
 
     c = client()
