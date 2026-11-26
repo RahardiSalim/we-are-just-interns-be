@@ -1,5 +1,7 @@
 # Run GoSafe yourself
 
+_Last checked: 2026-11-27._
+
 How to start the system on your laptop, and what you must get from the team because it is **not in the repository** (secrets, models, audio, settings on other people's accounts).
 
 Two ways to run it:
