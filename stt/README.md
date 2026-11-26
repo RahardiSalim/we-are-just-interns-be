@@ -58,6 +58,8 @@ See [CLAUDE.md](CLAUDE.md). The short version: no fine-tuning, language forced t
 
 Same 40 FLEURS clips without added noise, maleo only, through the full pipeline (Silero VAD + STT): WER 0.054, and 22 of the 40 clips have no error.
 
+On-device model candidates (Whisper tiny int8 and others, pinned by hash, with their measured accuracy) are in [models/README.md](models/README.md).
+
 **Read these numbers with care:**
 
 - On real speech the two models are a tie on accuracy; maleo is chosen because it is 4–5× faster.

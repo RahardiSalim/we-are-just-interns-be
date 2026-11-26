@@ -44,4 +44,36 @@ Run it from Python with `sherpa_onnx.OfflineRecognizer.from_whisper(encoder=...,
 
 The Indonesian fine-tunes we benchmarked (`maleo-ai/whisper-small-id`, `cahya/whisper-small-id`) are "small". An ONNX int8 export of them does not exist yet, so about 375 MB is an estimate from the stock small model, not a measurement.
 
-Accuracy of these candidates on our test sets is not recorded here yet.
+## Accuracy of Whisper tiny int8 on our test sets (measured 2026-11-26)
+
+Same clips and same WER normalisation as `benchmark_stt.py` (default slang map), so the rows can be compared with the maleo and cahya results in [../README.md](../README.md). tiny int8 ran in sherpa-onnx (Python package 2.0.3), `language="id"`, greedy decoding, whole clip, no VAD, 4 threads, one run. maleo and cahya are the PyTorch models from the benchmark.
+
+**FLEURS `id_id` dev (real read speech) with synthetic motorbike noise, WER, 320 clips**
+
+| Model | SNR 20 | SNR 10 | SNR 5 | SNR 0 | All |
+|---|---|---|---|---|---|
+| tiny int8 | 0.686 | 0.803 | 1.039 | 1.244 | **0.943** |
+| maleo (small, fine-tuned) | 0.047 | 0.125 | 0.225 | 0.456 | 0.213 |
+| cahya (small, fine-tuned) | 0.012 | 0.096 | 0.244 | 0.513 | 0.216 |
+
+**Ride sentences from `dialog_script.csv` (Edge TTS, 2 synthetic voices) with synthetic noise, 192 clips**
+
+| Model | WER SNR 20 | SNR 10 | SNR 5 | SNR 0 | WER all | Keyword recall all | at SNR 5 | at SNR 0 |
+|---|---|---|---|---|---|---|---|---|
+| tiny int8 | 0.362 | 0.465 | 0.593 | 0.819 | **0.560** | **0.40** | 0.24 | 0.18 |
+| maleo | 0.063 | 0.071 | 0.116 | 0.230 | 0.120 | 0.94 | 0.92 | 0.84 |
+
+Keyword recall counts 152 keyword occurrences from `keywords.txt`. cahya was not run on this set.
+
+**FLEURS clean, no added noise, 40 clips:** tiny int8 WER 0.593. maleo got 0.054 through the full pipeline (Silero VAD + STT), so the method is not identical.
+
+**Cost on the laptop CPU** (not phone numbers): model load 0.2 s. Memory of the whole Python process: 328 to 342 MB after loading, 493 to 650 MB at peak, over three separate runs. About 0.52 s per FLEURS clip (6 to 18 s of audio) and 0.18 s per ride-sentence clip (3 to 6 s).
+
+**Reading:** tiny int8 is not usable for this job. It catches 40% of the keywords, 24% at 5 dB, and WER above 1 at 5 and 0 dB means it adds many wrong words. Examples: "badan mbak bagus sekali" became "baiknya buat buat disbanget", and "bus coaster jepang" became "pus kwaster cepang".
+
+**Limits:**
+- This is the stock multilingual tiny, not fine-tuned for Indonesian.
+- How much of the loss comes from int8 and how much from the tiny size is **not separated**: there was no run with fp32 tiny (`tiny-*.onnx` without `.int8`, about 152 MB).
+- One real-voice set (read sentences, no slang, all labelled MALE). The ride sentences are synthetic voices and the noise is synthetic. No recording of a real ride.
+- Whisper base (about 160 MB) has not been measured.
+- The evaluation script is not committed: it needs the `sherpa-onnx` package, which is not a dependency of this folder.
