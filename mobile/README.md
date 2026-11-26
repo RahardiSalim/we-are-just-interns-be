@@ -336,7 +336,8 @@ How it works (`lib/services/dev_ml.dart`):
 - The mic is sent in **15-second pieces**. A sentence still going at the end of a piece is carried into the next one, so it's never cut.
 - Each line shows the classifier's raw label next to it, e.g. `CONTACT_SOLICIT 0.99`.
 - **Classifier rule:** the keywords decide on their own; the team model alone can only add a warning, and only at 0.9 or more (it isn't validated: about 11% of friendly chat gets a harmful label); where both agree, the higher score counts. Its 11 labels map onto the app's 4 in `devLabelMap` (our mapping; the team should confirm it).
-- **Keywords** allow Indonesian suffixes ("buka bajunya") and include swear words (uncomfortable: a warning, never high) and slurs (sexual harassment).
+- **Keywords** allow Indonesian suffixes ("buka bajunya"). Swear words count only when aimed at someone (an addressee like lu, lo, kamu, dasar in the same line), and then only as uncomfortable: a warning, never high. Slurs count as sexual harassment.
+- **Labels:** the team model's 11 labels and the 5-label scheme (normal, uncomfortable, sexual, threat, victim) both map onto the app's 4; victim speech (refusal, distress) only warns on its own. See `stt/eval/README.md` for the classifier experiment.
 - The service prints KEPT or DROP for every segment. It keeps real speech before an invented YouTube outro ("like share dan subscribe") instead of dropping the whole segment.
 - Web only: on Android the ride recorder and this listener would compete for the mic.
 

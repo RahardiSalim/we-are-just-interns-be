@@ -38,4 +38,23 @@ void main() {
     expect(v.label, Label.uncomfortable);
     expect(v.flagged, [false, true]);
   });
+
+  test(
+    'the 5-label model maps onto the app labels; victim speech only warns',
+    () {
+      final c = withModel({
+        'Lu jangan macem-macem.': ('threat', 0.97),
+        'Pak, itu bukan urusan bapak.': ('victim', 0.95),
+      });
+      expect(
+        c.classify(['Lu jangan macem-macem.']).label,
+        Label.uncomfortable,
+        reason: 'the model alone still only warns',
+      );
+      expect(
+        c.classify(['Pak, itu bukan urusan bapak.']).label,
+        Label.uncomfortable,
+      );
+    },
+  );
 }

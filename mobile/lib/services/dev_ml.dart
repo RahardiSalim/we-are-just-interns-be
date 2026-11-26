@@ -13,7 +13,7 @@ import '../engine/classifier.dart';
 /// `--dart-define=DEV_ML=http://localhost:7070`. The architecture puts both on the phone; this
 /// exists so the whole flow can be tried with a real voice before they're ported.
 
-/// The team classifier's 11 labels mapped onto the app's 4.
+/// The team classifier's labels (the original 11, or the 5-label scheme) mapped onto the app's 4.
 // shortcut: our mapping, not the model author's; the team should confirm it.
 const devLabelMap = {
   'LOGISTICS': Label.normal,
@@ -27,6 +27,14 @@ const devLabelMap = {
   'SEXUAL_EXPLICIT': Label.sexualHarassment,
   'INTIMIDATION': Label.threat,
   'DISTRESS': Label.threat, // the person being harmed asking for help
+  // The 5-label scheme (stt/eval/train_classifier.py --scheme 5).
+  'normal': Label.normal,
+  'uncomfortable': Label.uncomfortable,
+  'sexual': Label.sexualHarassment,
+  'threat': Label.threat,
+  // Refusal or distress from the person being harmed: a reaction, not an offence. On its own it only warns;
+  // with harassment or a threat in the same window, those raise the flag.
+  'victim': Label.uncomfortable,
 };
 
 /// The team model together with the keyword filter, line by line:

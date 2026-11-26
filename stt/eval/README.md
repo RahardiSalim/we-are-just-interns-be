@@ -18,6 +18,32 @@ Read these aloud and record them, to measure the whole pipeline (speech-to-text,
 - **Safe phrase (G):** G01 and G02 use the default phrase. If you've set your own in the app, add a line with it and note it.
 - **Language:** mostly Indonesian with some English, as written. The swear words and insults are deliberate: the system has to tell friendly swearing (B) from swearing *at* someone (C, F).
 
+## Scoring
+
+`stt/eval/run.sh` (from the repo root or `stt/`) runs every file in `recordings/` through the whole pipeline and writes `out/report.md`:
+
+1. `score.py transcribe`: Silero voice detection, Whisper, the cleaning filter (shared with `dev_server.py`), and the classifier. Add `--classifier models/clf-lite-5x` to score another model.
+2. `mobile/test/eval_replay_test.dart`: the **app's own** keywords, combined classifier, safe phrase and rules decide every heard line (skipped in normal test runs).
+3. `score.py report`: compares with `ride_script.csv`. It reports danger lines caught, false alarms (and per hour of harmless talk), how many lines speech-to-text heard, and invented lines on no-speech audio, plus a line-by-line table of what was heard and what fired.
+
+A script line is matched to the heard lines in order, across up to 3 neighbouring lines (speech-to-text splits and merges sentences), with rare words weighted over fillers like "pak", "aja", "ya". A warning or high flag earlier in the ride covers later danger lines (the app's cooldown and once-per-ride rules).
+
+No-speech clips (`I_*`): `I_silence_room.wav` and `I_music_synth_piano.wav` are generated; `I_noise_musan_*.wav` are public-domain background noise from MUSAN (freesound).
+
+## Classifier experiment
+
+`train_classifier.py` trains IndoBERT-lite (`indobenchmark/indobert-lite-base-p1`, 11.7M parameters, 45 MB) on the synthetic sentences plus `stt/data/classifier_extra.csv` (look-alikes, friendly swearing, complaints, slang threats, ordinary insults; regenerate with `stt/data/make_classifier_extra.py`). Use the 5-label scheme: normal, uncomfortable, sexual, threat, victim. Load the base model's tokenizer as `BertTokenizer` (the script does): its config names an ALBERT tokenizer that turns every Indonesian word into unknown pieces.
+
+Results on 2026-11-27 (your voice = 8 scenario recordings by one speaker, quiet room; plus 264 s of no-speech audio):
+
+| Classifier | Hand-written lines | Your voice: danger caught | Your voice: false alarms |
+|---|---|---|---|
+| Team DistilBERT (11 labels) | 59% (5-label view) | 14/16 | 3/42 |
+| IndoBERT-lite, synthetic only | 66% | | |
+| IndoBERT-lite + extra data, swearing counts only when aimed at someone | 89% | **15/16** | **1/42** |
+
+The hand-written lines and the extra data have the same author, so the 89% is optimistic; the voice results are the fairer test. Both remaining voice errors are not the classifier's: speech-to-text heard "gue bawa pisau" as "ke bawah pisau", and the keyword "buka baju" fired on a child's clothes.
+
 ## Log
 
 Keep a short line per file in `recordings/log.md`: file, setting, speakers, anything unusual (a line skipped, a car horn over E03).

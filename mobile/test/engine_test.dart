@@ -118,7 +118,17 @@ void main() {
       final c = KeywordClassifier();
       expect(c.classify(['Anjing lu, bangsat!']).label, Label.uncomfortable);
       expect(c.classify(['Dasar perempuan bodoh.']).label, Label.uncomfortable);
-      expect(c.classify(['What the fuck, Pak.']).label, Label.uncomfortable);
+      expect(c.classify(['Fuck you, Pak.']).label, Label.uncomfortable);
+      expect(
+        c.classify(['Anjir, macet banget.']).label,
+        Label.normal,
+        reason: 'swearing at the traffic, not at anyone',
+      );
+      expect(
+        c.classify(['Bos gue bangsat banget.']).label,
+        Label.normal,
+        reason: 'about a third person',
+      );
       expect(c.classify(['Dasar lonte.']).label, Label.sexualHarassment);
       expect(
         c.classify(['Anjingnya lucu banget.']).label,
