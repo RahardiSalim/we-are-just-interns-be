@@ -341,6 +341,23 @@ How it works (`lib/services/dev_ml.dart`):
 - The service prints KEPT or DROP for every segment. It keeps real speech before an invented YouTube outro ("like share dan subscribe") instead of dropping the whole segment.
 - Web only: on Android the ride recorder and this listener would compete for the mic.
 
+## Speech-to-text on the phone (experiment)
+
+The scripted conversation can be replaced by real speech-to-text that runs **inside the app**: whisper.cpp through the `whisper_ggml` package, with the same Indonesian model the benchmark picked (`maleo-ai/whisper-small-id`, ggml q8_0, see `stt/models/README.md`). It is off unless `WHISPER_MODEL` is set, so nothing changes by default. The words are judged by the app's own classifier (the keyword filter), not the team model.
+
+| Flag | What it does |
+|---|---|
+| `--dart-define=WHISPER_MODEL=<path>` | The ggml file **on the phone**. Turns the feature on. The model (264 MB) is not in the app or the repo |
+| `--dart-define=WHISPER_VAD=<path>` | Optional Silero ggml file (about 1 MB) so silence never reaches the decoder and sentences split at pauses. Not tried yet |
+| `--dart-define=WHISPER_TEST_WAV=<path>` | Hear a 16 kHz mono WAV instead of the microphone, to test without a mic |
+| `--dart-define=WHISPER_CHUNK_SECS=6` | Audio is decoded in pieces this long. Shorter shows words sooner and works the phone harder |
+
+On an emulator (debug build) the app can only read its own private folder, so copy the files in with `adb push` to `/data/local/tmp/`, then `adb shell run-as com.gosafe.gosafe cp ... files/` and use `/data/user/0/com.gosafe.gosafe/files/<file>` in the flags.
+
+`lib/services/on_device_stt.dart` holds it: the microphone is read on its own while pieces are decoded, a sentence still going at the end of a piece is carried into the next, and `SpeechFilter` is the hallucination filter of `stt/stt_service.py` ported to Dart (invented "like dan subscribe" outros, `[BLANK_AUDIO]`, loops like "hai hai hai"; a line with "tolong" is never dropped as a loop). The log shows `mic level`, `decoded Xs of audio in Y ms` and each line as KEPT or DROP.
+
+What this does **not** show: speed, memory and battery on a real phone were not measured. The only run was on an arm64 emulator on a Mac laptop, where a 6 s piece took 3 to 5 s to decode, with one 31 s spike on a looping piece. It also does not mask phone numbers, plates or emails (the Python module does), and the score Whisper gives for "no speech" is not available, so the filter is weaker than the Python one.
+
 ## Running it
 
 Start the emulators, seed data and backend as described in the root [CLAUDE.md](../CLAUDE.md), under "Run everything locally". Then, from `mobile/`:
