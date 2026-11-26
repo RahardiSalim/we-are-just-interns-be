@@ -1,16 +1,26 @@
+import os
 from functools import cache
 
 import firebase_admin
-from firebase_admin import firestore
+from firebase_admin import credentials, firestore
+from google.auth.credentials import AnonymousCredentials
 
 from app.core import config
 
 
+class _EmulatorCredential(credentials.Base):
+    """The emulators accept any caller, so skip Google's credential lookup."""
+
+    def get_credential(self):
+        return AnonymousCredentials()
+
+
 @cache
 def init() -> firebase_admin.App:
-    # No credential argument: Cloud Run's service account (or local ADC / emulators) is used.
+    # On Cloud Run (or with local ADC) credential=None means the service account / ADC is used.
+    cred = _EmulatorCredential() if os.getenv("FIRESTORE_EMULATOR_HOST") else None
     return firebase_admin.initialize_app(
-        options={"projectId": config.GCP_PROJECT, "storageBucket": config.FIREBASE_STORAGE_BUCKET}
+        cred, options={"projectId": config.GCP_PROJECT, "storageBucket": config.FIREBASE_STORAGE_BUCKET}
     )
 
 

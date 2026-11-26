@@ -18,6 +18,6 @@ export const db = getFirestore(app);
 
 // Emulators can only be connected once, before first use; hot reload re-runs this module.
 if (firstLoad && process.env.NEXT_PUBLIC_USE_EMULATORS === "true") {
-  connectAuthEmulator(auth, "http://localhost:9099", { disableWarnings: true });
-  connectFirestoreEmulator(db, "localhost", 8080);
+  connectAuthEmulator(auth, "http://127.0.0.1:9099", { disableWarnings: true });
+  connectFirestoreEmulator(db, "127.0.0.1", 8080);
 }

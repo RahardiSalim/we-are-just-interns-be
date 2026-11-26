@@ -14,6 +14,21 @@ Read before writing code:
 | `mobile/` | Flutter, Android only | Firebase App Distribution |
 | `firebase/` | rules, indexes, `firebase.json` | `firebase deploy` |
 
+## Run everything locally
+
+No Firebase project is needed: the emulators use the offline project `demo-gosafe`.
+
+Once: install Java 21 (`brew install openjdk@21`, then put `/opt/homebrew/opt/openjdk@21/bin` on your `PATH`), the Firebase CLI (`npm install -g firebase-tools`), and `uv`.
+
+| Step | Where | Command |
+|---|---|---|
+| 1. Emulators (UI at http://127.0.0.1:4000) | `firebase/` | `firebase emulators:start` |
+| 2. Seed 6 accounts + demo data | `backend/` | `set -a; . ./.env.example; set +a; uv run python -m scripts.seed` |
+| 3. Backend | `backend/` | same env, then `uv run uvicorn app.main:app --reload` |
+| 4. Dashboard, live | `dashboard/` | `NEXT_PUBLIC_FIREBASE_API_KEY=demo-key NEXT_PUBLIC_FIREBASE_PROJECT_ID=demo-gosafe NEXT_PUBLIC_USE_EMULATORS=true npm run dev` |
+
+Sign in as `agent1@gosafe.test` with the `SEED_PASSWORD` from `backend/.env.example`. Emulator data is wiped when the emulators stop; re-run step 2.
+
 ## Architecture rules
 
 1. Clients read Firestore, write through the API. Firestore rules deny all client writes.
