@@ -10,6 +10,10 @@
 /demo/
 /data_raw/
 
+# Downloaded model files: pinned by revision and hash in models/*.sha256, never committed
+/models/*/
+*.onnx
+
 # Generated output
 /results*.csv
 /out*.json
