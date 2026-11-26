@@ -1,6 +1,8 @@
-"""Emails to the rider and driver after an agent decides a case. Plain SMTP from the standard library.
+"""Emails to the rider and driver after an agent decides a case: over HTTPS through Resend when RESEND_API_KEY is set
+(Render's free tier blocks SMTP ports), otherwise plain SMTP from the standard library.
 What the emails say and how they look: services/email_content.py."""
 
+import base64
 import logging
 import re
 import smtplib
@@ -9,6 +11,7 @@ from email.message import EmailMessage
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
+import httpx
 from firebase_admin import auth
 
 from app.core import config
@@ -25,28 +28,57 @@ def asset(cid: str) -> Path:
     return next(p for p in (ASSETS / f"{cid}.png", ASSETS / f"{cid}.jpg") if p.exists())
 
 
+RESEND_URL = "https://api.resend.com/emails"
+
+
 def send(to: str, subject: str, text: str, html: str | None = None) -> None:
     """Sends one email (HTML with a plain-text copy). Never raises: a failed email must not undo the agent's decision."""
-    if not config.SMTP_HOST:
-        log.info("email skipped (no SMTP_HOST) to=%s subject=%s", to, subject)
+    if not (config.RESEND_API_KEY or config.SMTP_HOST):
+        log.info("email skipped (no RESEND_API_KEY or SMTP_HOST) to=%s subject=%s", to, subject)
         return
+    try:
+        if config.RESEND_API_KEY:
+            _send_resend(to, subject, text, html)
+        else:
+            _send_smtp(to, subject, text, html)
+    except Exception:
+        log.exception("email failed to=%s subject=%s", to, subject)
+
+
+def _inline_pictures(html: str) -> list[str]:
+    """The picture ids the HTML uses (logo, illustration, icons), each shown inline so it needs no remote images."""
+    return list(dict.fromkeys(re.findall(r'src="cid:([\w-]+)"', html)))
+
+
+def _send_resend(to: str, subject: str, text: str, html: str | None) -> None:
+    body: dict = {"from": config.RESEND_FROM, "to": [to], "subject": subject, "text": text}
+    if html:
+        body["html"] = html
+        pictures = [asset(cid) for cid in _inline_pictures(html)]
+        if pictures:
+            body["attachments"] = [
+                {"filename": p.name, "content": base64.b64encode(p.read_bytes()).decode(), "content_id": p.stem} for p in pictures
+            ]
+    res = httpx.post(RESEND_URL, headers={"Authorization": f"Bearer {config.RESEND_API_KEY}"}, json=body, timeout=20)
+    if res.status_code >= 400:
+        raise RuntimeError(f"Resend answered {res.status_code}: {res.text[:300]}")
+
+
+def _send_smtp(to: str, subject: str, text: str, html: str | None) -> None:
     msg = EmailMessage()
     msg["From"], msg["To"], msg["Subject"] = config.EMAIL_FROM, to, subject
     msg.set_content(text)
     if html:
         msg.add_alternative(html, subtype="html")
-        # Every picture the HTML uses (logo, illustration, icons) goes inline, so it shows without loading remote images.
-        for cid in dict.fromkeys(re.findall(r'src="cid:([\w-]+)"', html)):
+        # Every picture the HTML uses goes inline, so it shows without loading remote images.
+        for cid in _inline_pictures(html):
             path = asset(cid)
             msg.get_payload()[1].add_related(path.read_bytes(), "image", "jpeg" if path.suffix == ".jpg" else "png", cid=f"<{cid}>")
-    try:
-        with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=10) as smtp:
-            smtp.starttls()
-            if config.SMTP_USER:
-                smtp.login(config.SMTP_USER, config.SMTP_PASSWORD)
-            smtp.send_message(msg)
-    except Exception:
-        log.exception("email failed to=%s subject=%s", to, subject)
+    with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=10) as smtp:
+        smtp.starttls()
+        if config.SMTP_USER:
+            smtp.login(config.SMTP_USER, config.SMTP_PASSWORD)
+        smtp.send_message(msg)
 
 
 def address(uid: str) -> str | None:
