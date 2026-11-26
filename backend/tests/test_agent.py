@@ -24,6 +24,10 @@ def test_agent_opens_listens_and_decides(client, login, db):
     assert inc["status"] == "closed"
     assert (inc["decision"]["action"], inc["decision"]["agentId"]) == ("warn_driver", "agent1")
     assert audit(db) == [("decide", "agent1"), ("view_clip", "agent1")]
+    trip = db.document("trips", inc["tripId"]).get().to_dict()
+    told = {f"{trip[k]}@gosafe.test" for k in ("riderId", "driverId") if trip.get(k)}
+    assert {to for to, *_ in db.emails} == told  # a warning tells the rider and the driver
+    assert all(inc["tripId"] in subject or incident_id in subject for _, subject, _ in db.emails)
 
     assert client.post(f"/incidents/{incident_id}/decision", json={"action": "dismiss"}).status_code == 409
 

@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field, model_validator
 from app.api.trips import participant_trip
 from app.core.auth import current_user, require_role
 from app.core.firebase import db
-from app.services import pipeline, storage
+from app.services import mailer, pipeline, storage
 
 router = APIRouter(prefix="/incidents", tags=["incidents"])
 
@@ -39,7 +39,7 @@ class CreateIncident(BaseModel):
 
 
 @router.post("")
-def create_incident(body: CreateIncident, user: dict = Depends(current_user)) -> dict:
+def create_incident(body: CreateIncident, background: BackgroundTasks, user: dict = Depends(current_user)) -> dict:
     trip = participant_trip(body.tripId, user["uid"])
     consented = trip["consent"]["rider"] and trip["consent"]["driver"]
     ref = db().collection("incidents").document()
@@ -63,6 +63,8 @@ def create_incident(body: CreateIncident, user: dict = Depends(current_user)) ->
         "createdAt": firestore.SERVER_TIMESTAMP,
         "deleteAt": datetime.now(timezone.utc) + CLIP_RETENTION,
     })
+    if body.trigger == "sos":
+        background.add_task(mailer.sos_received, ref.id)  # "ticket created" email, after the response
     # shortcut: no "failed after 10 min" sweep for incidents never finalized; they expire via deleteAt.
     return {
         "incidentId": ref.id,
@@ -131,7 +133,7 @@ def clip_url(incident_id: str, agent: dict = Depends(require_role("agent"))) -> 
 
 
 @router.post("/{incident_id}/decision")
-def decide(incident_id: str, body: Decision, agent: dict = Depends(require_role("agent"))) -> dict:
+def decide(incident_id: str, body: Decision, background: BackgroundTasks, agent: dict = Depends(require_role("agent"))) -> dict:
     ref = db().document("incidents", incident_id)
 
     @firestore.transactional
@@ -149,4 +151,5 @@ def decide(incident_id: str, body: Decision, agent: dict = Depends(require_role(
 
     close(db().transaction())
     audit(agent["uid"], incident_id, "decide")
+    background.add_task(mailer.decision, incident_id, body.action)  # after the response, so SMTP never slows the agent
     return {"status": "closed"}

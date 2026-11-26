@@ -6,7 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.core import auth, config
 from app.main import app
-from app.services import notify, seed, storage
+from app.services import mailer, notify, seed, storage
 
 EMULATOR = os.getenv("FIRESTORE_EMULATOR_HOST")
 needs_emulator = pytest.mark.skipif(not EMULATOR, reason="start the Firebase emulators and set FIRESTORE_EMULATOR_HOST")
@@ -35,6 +35,9 @@ def db(monkeypatch):
     httpx.delete(f"http://{EMULATOR}/emulator/v1/projects/{config.GCP_PROJECT}/databases/(default)/documents")
     pushes: list[tuple[str, dict]] = []
     monkeypatch.setattr(notify, "push", lambda uid, data: pushes.append((uid, data)))
+    emails: list[tuple[str, str, str]] = []
+    monkeypatch.setattr(mailer, "address", seed.email)  # seeded accounts are <uid>@gosafe.test
+    monkeypatch.setattr(mailer, "send", lambda to, subject, text, html=None: emails.append((to, subject, text)))
     monkeypatch.setattr(storage, "signed_url", lambda path, method, *_: f"https://signed.test/{method}/{path}")
     monkeypatch.setattr(storage, "upload_bytes", lambda *_: None)
     monkeypatch.setattr(config, "LLM_BASE_URL", "")  # never call a real LLM from tests
@@ -44,4 +47,5 @@ def db(monkeypatch):
 
     c = client()
     c.pushes = pushes
+    c.emails = emails
     return c

@@ -44,6 +44,9 @@ def test_sos_without_any_transcript_escalates(client, login, db):
     incident_id = report(client, start_trip(client, login), trigger="sos")
     inc = db.document("incidents", incident_id).get().to_dict()
     assert (inc["status"], inc["severity"], inc["label"]) == ("escalated", "high", None)
+    (to, subject, text), = db.emails  # the "ticket created" email, to whoever pressed SOS
+    assert (to, subject) == ("rider1@gosafe.test", f"We've received your safety report (ticket #{incident_id})")
+    assert incident_id in text
 
 
 def test_unsafe_report_without_transcript_checks_in_on_both(client, login, db):
@@ -53,6 +56,7 @@ def test_unsafe_report_without_transcript_checks_in_on_both(client, login, db):
     checkins = [c.to_dict() for c in db.collection("checkins").where(filter=FieldFilter("incidentId", "==", incident_id)).get()]
     assert sorted((c["userId"], c["status"]) for c in checkins) == [("driver1", "sent"), ("rider1", "sent")]
     assert sorted(uid for uid, _ in db.pushes) == ["driver1", "rider1"]
+    assert db.emails == []  # only SOS sends the "ticket created" email
 
 
 def test_device_label_is_trusted_over_the_keyword_filter(client, login, db):

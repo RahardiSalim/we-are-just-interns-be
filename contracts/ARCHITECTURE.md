@@ -20,6 +20,7 @@ Cost: Cloud Run free tier covers a 2 GiB instance for roughly 62 h/month if it s
 - Mobile app and dashboard **read** Firestore live, **write** through FastAPI.
 - The app uploads audio straight to Cloud Storage using a signed URL from FastAPI.
 - FCM pushes check-ins to the app.
+- Email (plain SMTP): whoever presses SOS gets a "ticket created, being processed" email; after a decision, the rider (and the driver when warned or suspended) is told what the safety team decided.
 - Neither client ever holds admin credentials.
 
 ## On-device listening (mobile)
@@ -103,7 +104,7 @@ Only the backend changes `status`.
 | `checkin_pending` | Severity medium; FCM push + `checkins` doc to rider and driver | `resolved_ok` if both reply ok; `escalated` on `need_help` or no reply in 90 s |
 | `escalated` | Severity high, failed check-in, or `trigger: auto`; summary built | `under_review` when an agent opens it |
 | `under_review` | Agent calls `POST /incidents/{id}/open` | `closed` after a decision |
-| `closed` | Decision recorded | Driver may appeal (stretch) |
+| `closed` | Decision recorded; emails sent after the response (`services/mailer.py`) | Driver may appeal (stretch) |
 
 Processing: take the phone's transcript, label and score → if the phone sent no label, the keyword filter labels the transcript → severity → for escalations, a summary from the masked transcript (template now, Sahabat-AI later). A report with no transcript at all (the models weren't ready on the phone) is judged by its trigger alone.
 
@@ -120,7 +121,7 @@ Classifier labels: `normal`, `uncomfortable`, `sexual_harassment`, `threat`.
 
 | App | Config |
 |---|---|
-| backend | `GCP_PROJECT`, `FIREBASE_STORAGE_BUCKET`, `ENABLE_DEV_ROUTES`, `CHECKIN_TIMEOUT_SEC` (90), and for the AI review `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` (Sahabat-AI) and `GEMINI_API_KEY` / `GEMINI_MODEL` (fallback) |
+| backend | `GCP_PROJECT`, `FIREBASE_STORAGE_BUCKET`, `ENABLE_DEV_ROUTES`, `CHECKIN_TIMEOUT_SEC` (90), and for the AI review `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` (Sahabat-AI) and `GEMINI_API_KEY` / `GEMINI_MODEL` (fallback), and for decision emails `SMTP_HOST` / `SMTP_PORT` (587) / `SMTP_USER` / `SMTP_PASSWORD` / `EMAIL_FROM` (empty host: logged, not sent) |
 | dashboard | `NEXT_PUBLIC_FIREBASE_*`, `NEXT_PUBLIC_API_URL` |
 | mobile | `google-services.json`, `API_URL` via `--dart-define`, `DEMO_MODE` |
 
