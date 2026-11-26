@@ -8,7 +8,8 @@ Follow the root [CLAUDE.md](../CLAUDE.md) rules and [contracts/ARCHITECTURE.md](
 - Layout: `src/app/` routes, `src/components/`, `src/lib/firebase.ts`, `src/lib/api.ts` (all writes go to FastAPI), `src/types/api.d.ts` (generated from `contracts/openapi.json`).
 - No ML, no secrets, no Firestore writes here. Clip audio only via `GET /incidents/{id}/clip-url`.
 - Show times in WIB.
-- Config: `NEXT_PUBLIC_FIREBASE_*`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_USE_EMULATORS`. See `.env.example`; the build fails without `NEXT_PUBLIC_FIREBASE_API_KEY`.
+- Config: `NEXT_PUBLIC_FIREBASE_*`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_USE_EMULATORS`. See `.env.example`.
+- Mock mode: with no `NEXT_PUBLIC_FIREBASE_API_KEY`, the page skips login and shows `src/lib/mock.ts`. Firebase code loads only in live mode (`LiveHome`, imported with `ssr: false`). Env vars are baked in at build time, so redeploy after changing them.
 - Read `AGENTS.md` first: this Next.js version differs from older docs; the bundled guides are in `node_modules/next/dist/docs/`.
 - Firestore types live in `src/types/firestore.ts` and mirror `contracts/firestore-schema.md`.
 
