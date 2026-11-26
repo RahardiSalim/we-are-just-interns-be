@@ -31,10 +31,10 @@ Read by: rider, driver, agents.
 
 | Field | Type |
 |---|---|
-| `type` | `gps` \| `stop` \| `deviation` \| `sos` \| `manual_unsafe` \| `checkin_sent` \| `checkin_reply` |
+| `type` | `gps` \| `stop` \| `deviation` \| `sos` \| `manual_unsafe` \| `warning` (planned) \| `checkin_sent` \| `checkin_reply` |
 | `ts` | timestamp |
 | `lat`, `lng` | number |
-| `data` | map |
+| `data` | map (for `warning`: `{label, score, by}`) |
 
 Read by: agents. (`stop` and `deviation` are kept in the enum but nothing produces them yet; see ARCHITECTURE.md Decisions.)
 
@@ -44,7 +44,7 @@ Read by: agents. (`stop` and `deviation` are kept in the enum but nothing produc
 |---|---|
 | `tripId` | string |
 | `reportedBy` | uid |
-| `trigger` | `sos` \| `manual_unsafe` |
+| `trigger` | `sos` \| `manual_unsafe` \| `auto` (planned: the phone's classifier hit the high threshold) |
 | `windowStart`, `windowEnd` | timestamp (the audio window the reporter flagged) |
 | `status` | `awaiting_upload` \| `processing` \| `failed` \| `dismissed` \| `checkin_pending` \| `resolved_ok` \| `escalated` \| `under_review` \| `closed` |
 | `severity` | `low` \| `medium` \| `high` |
@@ -83,11 +83,27 @@ Read by: that user, agents.
 
 Read by: agents. Written by: backend only.
 
+## audioRequests/{requestId} (planned)
+
+An agent asking a phone for audio it still holds (see ARCHITECTURE.md "On-device listening").
+
+| Field | Type |
+|---|---|
+| `incidentId`, `tripId` | string |
+| `userId` | uid of the phone's owner (one request per phone) |
+| `requestedBy` | agent uid |
+| `status` | `pending` \| `uploaded` \| `expired` (the phone had already deleted it, or never came online) |
+| `clipPaths` | Cloud Storage paths, once uploaded |
+| `requestedAt`, `uploadedAt` | timestamp |
+
+Read by: agents; the phone owner reads their own. Written by: backend.
+
 ## Retention
 
 - Firestore TTL policy on `incidents.deleteAt`.
 - Cloud Storage lifecycle rule deletes clips after 7 days.
 - Open cases push `deleteAt` forward.
+- On the phones (not Firestore): all trip audio and transcripts, encrypted, deleted after 7 days.
 
 ## Stretch
 

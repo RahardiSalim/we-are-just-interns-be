@@ -1,6 +1,6 @@
 # GoSafe
 
-Ride-safety system for GoRide/GoCar: an Android app records audio on trigger (SOS / "I feel unsafe"), a FastAPI backend transcribes and classifies it, and a Next.js dashboard lets support agents review escalated cases. Hackathon project.
+Ride-safety system for GoRide/GoCar: rider and driver phones listen during the trip, transcribe and classify speech on the phone, warn both people or report automatically, and keep SOS / "I feel unsafe" always available. A FastAPI backend runs the incident flow, and a Next.js dashboard lets support agents review escalated cases. Hackathon project.
 
 Read before writing code:
 - [contracts/ARCHITECTURE.md](contracts/ARCHITECTURE.md): stack, API contract, incident lifecycle, deployment, phases
@@ -34,7 +34,7 @@ Sign in as `agent1@gosafe.test` with the `SEED_PASSWORD` from `backend/.env.exam
 1. Clients read Firestore, write through the API. Firestore rules deny all client writes.
 2. Only the backend holds admin credentials (Cloud Run service account). No service-account JSON in any app.
 3. One contract: `openapi.json` is the API truth, `firestore-schema.md` the data truth. When either changes, regenerate dashboard TS types and mobile Dart models in the same PR.
-4. Edge-ready payloads: `POST /incidents` takes optional `deviceTranscript` / `deviceLabel` / `deviceScore`; if present, skip cloud STT.
+4. The phone judges first: both phones listen, transcribe and classify on-device (ARCHITECTURE.md "On-device listening"); `POST /incidents` carries `deviceTranscript` / `deviceLabel` / `deviceScore` and the backend uses them as given.
 5. Incident `status` is one field, changed only by the backend.
 6. Server timestamps are UTC; the UI converts to WIB.
 

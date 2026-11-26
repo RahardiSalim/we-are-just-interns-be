@@ -6,7 +6,7 @@ Single source of truth for building the three apps. Where the earlier "System de
 
 | Part | Pick | Notes |
 |---|---|---|
-| Android app | Flutter (Android only) | Background recording needs an Android foreground service with the `microphone` type. `sherpa_onnx` Flutter package for the later on-device step. |
+| Android app | Flutter (Android only) | Listens for the whole trip on both phones (see "On-device listening"). Foreground service with the `microphone` type; `sherpa_onnx` for voice detection + Whisper; ONNX Runtime for IndoBERT. |
 | Backend | FastAPI on Cloud Run | Same Google project as Firebase, so Firestore, Storage, FCM and Speech-to-Text work with no extra keys. IndoBERT via ONNX Runtime, not full PyTorch. |
 | Database | Firestore | Not relational, no geo queries: route maths in Python. |
 | Files | Cloud Storage for Firebase | Requires the **Blaze** plan (fails with 402/403 on Spark). Add a budget alert. |
@@ -22,12 +22,42 @@ Cost: Cloud Run free tier covers a 2 GiB instance for roughly 62 h/month if it s
 - FCM pushes check-ins to the app.
 - Neither client ever holds admin credentials.
 
+## On-device listening (mobile)
+
+Agreed 2026-11-26. The phone listens and judges; the backend only hears about it when a person reports or the model is confident something is wrong.
+
+**Who records.** Rider and driver both consent at trip start, and **both phones** record for the whole trip. Recording on both means the victim's copy survives if the other person deletes the app. Without both consents nothing is recorded.
+
+**Pipeline on each phone.**
+1. Silero VAD (voice detection) via `sherpa_onnx`, so speech-to-text only runs while someone is talking.
+2. Whisper (`cahya/whisper-small-id`, ONNX int8) via `sherpa_onnx` on each utterance as it ends. Text arrives a few seconds behind speech. sherpa-onnx has no official streaming Indonesian model; the only one found is a third-party upload we couldn't verify, so VAD + Whisper is the plan.
+3. IndoBERT (ONNX int8, ONNX Runtime) on a sliding window of the last 30 s of text → `label` + `score`. It needs its WordPiece tokenizer in Dart (or a model export that includes it).
+
+**Storage on the phone.** All audio (Opus, about 7 MB per hour) and all transcripts, flagged or not, stay on each phone for **7 days**, then are deleted.
+- Encrypted with AES-GCM using an Android Keystore key, so only the app can read it. Users can't play it back or export it in the app.
+- It leaves the phone only through a report, an automatic "high" report, or an agent's audio request.
+- The consent screen states this, including the 7 days (UU PDP: purpose and retention must be stated).
+
+**Responses.** The two thresholds are set by the modelling team from their test set.
+
+| Level | When | What happens |
+|---|---|---|
+| Warning | `score` ≥ warning threshold | A neutral message on **both** phones: the conversation seems off, tell us if you're uncomfortable, please keep it respectful. Plus a Report button. At most once per trip or once every 10 minutes. Logged as a trip event; no incident. |
+| High | `score` ≥ high threshold for `threat` / `sexual_harassment` | At the same moment: an "Are you OK?" check-in to both, **and** an incident with `trigger: auto` plus the flagged clip goes to customer service. A "need help" answer raises the case's priority. |
+| SOS / "I feel unsafe" | A person presses it, any time | Unchanged. The buttons are always on screen and never wait for the model. |
+
+**Rules.**
+- **Motorbike drivers:** a GoRide driver can't tap while riding, so the driver's silence never counts as "no reply". The rider's answer decides. In GoCar both answers count.
+- **A person decides:** customer service reviews every case. The model never warns, suspends or bans a driver on its own record.
+
+**Biggest risks.** Whisper's speed and battery use on both phones over a full driver shift: measure on a mid-range phone in week one, and try Whisper-base if small is too slow. The second risk is the Dart tokenizer for IndoBERT.
+
 ## Architecture rules
 
 1. **Clients read Firestore, write through the API.** Firestore rules deny all client writes.
 2. **Only the backend holds admin credentials.** Cloud Run service account. No service-account JSON in any app, ever.
 3. **One contract.** `contracts/openapi.json` is the API truth, `contracts/firestore-schema.md` the data truth. When either changes, regenerate TypeScript types (dashboard) and Dart models (mobile) in the same pull request.
-4. **Edge-ready payloads.** `POST /incidents` accepts an optional on-device transcript and label. If present, the backend skips cloud STT.
+4. **The phone judges first.** `POST /incidents` carries the on-device transcript, label and score. The backend uses them as given, and only runs cloud STT when a report arrives without a transcript.
 5. **Status lives in one field.** Each incident has one `status`, changed only by the backend, following the lifecycle below.
 6. **Timestamps are UTC** (Firestore server time); the UI converts to WIB.
 
@@ -55,6 +85,17 @@ Every endpoint takes `Authorization: Bearer <Firebase ID token>`; the backend ch
 | `POST /incidents/{id}/decision` | Dashboard (agent) | `dismiss` \| `warn_driver` \| `suspend_driver` \| `contact_rider` + note |
 | `POST /dev/seed`, `POST /dev/reset` | Team only | Loads users, trips, sample incidents. Disabled when `ENABLE_DEV_ROUTES` is off |
 
+**Planned for on-device listening** (not built yet):
+
+| Change | Caller | Does |
+|---|---|---|
+| `POST /incidents` accepts `trigger: auto` | App | Requires `deviceLabel` + `deviceScore`. Escalates at once *and* sends the check-in to both, without changing `status` to `checkin_pending` |
+| `POST /trips/{id}/events` accepts `type: warning` | App | Logs a warning with `data: {label, score}`. No incident |
+| `POST /checkins/{id}/reply` on GoRide | App | The driver's no-reply is ignored: rider `ok` resolves, rider `need_help` or rider no-reply escalates |
+| `POST /incidents/{id}/request-audio` | Dashboard (agent) | Creates one `audioRequests` doc per phone and pushes `{type: audio_request}` to both. Writes an audit log |
+| `POST /audio-requests/{id}/upload-url` | App | Signed upload URL + `uploadMethod` for that trip's audio from this phone |
+| `POST /audio-requests/{id}/done` | App | Marks the upload complete; the dashboard shows the clips |
+
 ## Incident lifecycle
 
 Only the backend changes `status`.
@@ -65,7 +106,7 @@ Only the backend changes `status`.
 | `processing` | Finalize | STT → classifier → severity → `dismissed`, `checkin_pending` or `escalated` |
 | `dismissed` | Severity low | Logged, deleted at `deleteAt` |
 | `checkin_pending` | Severity medium; FCM push + `checkins` doc to rider and driver | `resolved_ok` if both reply ok; `escalated` on `need_help` or no reply in 90 s |
-| `escalated` | Severity high or failed check-in; timeline + LLM summary built | `under_review` when an agent opens it |
+| `escalated` | Severity high, failed check-in, or `trigger: auto` (planned; the check-in to both runs alongside); timeline + LLM summary built | `under_review` when an agent opens it |
 | `under_review` | Agent calls `POST /incidents/{id}/open` | `closed` after a decision |
 | `closed` | Decision recorded | Driver may appeal (stretch) |
 
@@ -78,7 +119,7 @@ Classifier labels: `normal`, `uncomfortable`, `sexual_harassment`, `threat`.
 - **Accounts:** email + password demo accounts (2 riders, 2 drivers, 2 agents). `backend/scripts/seed.py` creates them and sets the `role` custom claim.
 - **Firestore rules:** deny every client write. A user reads their own `users` doc, trips where they are rider or driver, their own `checkins`, and incidents they reported. Agents read everything.
 - **Storage rules:** deny all client access. Only signed URLs from the backend. The Cloud Run service account needs "Service Account Token Creator" on itself to sign URLs.
-- **Audio:** HTTPS + Google encryption at rest + 10-min signed URLs. App-side AES-GCM is a stretch goal.
+- **Audio:** on the phone, AES-GCM with an Android Keystore key (required, since audio stays on the phone for 7 days). In transit, HTTPS with 10-min signed URLs; in the cloud, Google encryption at rest.
 - **Privacy:** mask phone numbers and names before transcripts reach the LLM; log every clip view; no model decision bans anyone automatically.
 - **Secrets:** never committed. Backend reads env vars on Cloud Run; dashboard uses Vercel env vars; `google-services.json` stays out of public repos.
 
@@ -121,18 +162,19 @@ Waiting on something outside the code. Build around these with stubs or seed dat
 | IndoBERT classifier (ONNX int8) | Modelling team: dataset + fine-tune + export | Seeded incidents carry a fixed `label` and `score` |
 | Chirp 3 STT | Firebase/GCP project on Blaze, Speech API enabled | Seeded transcript |
 | Sahabat-AI summary | A hosted endpoint (`LLM_BASE_URL`, `LLM_API_KEY`) | Seeded summary |
-| On-device STT / classifier | Modelling team ONNX exports, a test phone | Cloud path only |
+| On-device Whisper + IndoBERT | Modelling team: ONNX exports, the warning/high thresholds, a speed and battery benchmark on a mid-range phone | The app sends a canned transcript and label so the backend flow can be tested |
 | Sample audio + real GPS trace | Team recordings | `contracts/fixtures/demo-trip.json` (hand-made route), `clipPath: null` |
 | Firebase project | Blaze plan + budget alert | Emulators (`demo-gosafe`) |
 | Backend deploy | GitHub repo variables `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA` (Workload Identity Federation) | Run locally |
-| Mobile app | Flutter SDK + Android phone on a dev machine | Not started |
+| Mobile listening service | Android SDK + a real phone (the microphone service can't run in the web preview) | Mock trip screen in `mobile/` |
+| Warning message wording | Team / pitch owner | Placeholder text |
 
 ## Decisions (where the two source docs disagreed)
 
-- **Severity rules** (`backend/app/services/pipeline.py`): `threat` or `sexual_harassment` → high (escalate). No label at all and trigger `sos` → high. Everything else → medium (check-in). A person pressed the button, so the backend never dismisses on its own; `dismissed` stays for future automatic triggers.
+- **Severity rules for button reports** (`backend/app/services/pipeline.py`): `threat` or `sexual_harassment` → high (escalate). No label at all and trigger `sos` → high. Everything else → medium (check-in). A person pressed the button, so the backend never dismisses these. Automatic reports only arrive at "high", so `dismissed` stays unused for now.
 - **Classifier until IndoBERT lands:** an Indonesian keyword filter (`app/services/classify.py`). A `deviceLabel` from the phone always wins; the filter still marks `flagged` lines.
 - **Summary until Sahabat-AI is hosted:** a template from the masked flagged lines (phone numbers masked; names not yet).
 - **Retention:** 7 days by default, 30 days while a case is escalated, back to 7 days once closed.
 
-- **Severity is decided in the backend** for the demo (cloud path). The on-phone path arrives later through rule 4 with no API change.
+- **The phone listens and judges** (replaces the earlier "backend decides severity, phone only on button press" plan). See "On-device listening". Button reports still go through the backend's severity rules.
 - **No trip-anomaly rules.** GoTo already records trip anomalies. `POST /trips/{id}/events` only stores GPS and SOS / manual-unsafe events for the timeline map.
