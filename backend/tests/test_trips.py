@@ -96,6 +96,47 @@ def test_live_marks_the_open_case_until_the_ride_ends(client, login, db):
     assert db.document("incidents", created["incidentId"]).get().get("live") is False
 
 
+def live_sos_case(client, login, order: str) -> str:
+    login("rider1")
+    client.post("/trips", json={"orderId": order, "riderConsent": True})
+    created = client.post("/incidents", json={"tripId": order, "trigger": "sos", "windowStart": "2026-11-26T12:00:00Z",
+                                              "windowEnd": "2026-11-26T12:00:30Z"}).json()
+    client.post(f"/incidents/{created['incidentId']}/finalize")
+    put_recording(client, order, pieces=1, live=True)
+    return created["incidentId"]
+
+
+def test_live_ends_with_the_ride_even_on_a_case_the_agent_already_closed(client, login, db):
+    case = live_sos_case(client, login, "GR-1010")
+    login("agent1")
+    client.post(f"/incidents/{case}/open")
+    client.post(f"/incidents/{case}/decision", json={"customer": "none", "driver": "none"})
+    login("rider1")
+    client.post("/trips/GR-1010/end")
+    put_recording(client, "GR-1010", pieces=2, done=True)
+    assert db.document("incidents", case).get().get("live") is False
+
+
+def test_live_ends_when_the_ride_ends_even_if_the_last_upload_never_comes(client, login, db):
+    case = live_sos_case(client, login, "GR-1011")
+    assert client.post("/trips/GR-1011/end").status_code == 200  # then the signal is gone for good
+    assert db.document("incidents", case).get().get("live") is False
+    assert db.document("trips", "GR-1011").get().to_dict()["recordings"]["rider"]["live"] is False
+
+
+def test_live_stays_while_the_other_phone_still_streams(client, login, db):
+    case = live_sos_case(client, login, "GR-1012")
+    login("driver1")
+    client.post("/trips", json={"orderId": "GR-1012", "role": "driver"})
+    put_recording(client, "GR-1012", pieces=1, live=True)
+    login("rider1")
+    put_recording(client, "GR-1012", pieces=2, done=True)
+    assert db.document("incidents", case).get().get("live") is True, "the driver's phone is still Live"
+    login("driver1")
+    put_recording(client, "GR-1012", pieces=2, done=True)
+    assert db.document("incidents", case).get().get("live") is False
+
+
 def test_a_report_or_a_second_warning_shares_the_recording_but_one_warning_does_not(client, login, db):
     login("rider1")
     client.post("/trips", json={"orderId": "GR-1006", "riderConsent": True})

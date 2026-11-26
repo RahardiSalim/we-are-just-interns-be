@@ -79,10 +79,15 @@ def piece_path(trip_id: str, role: str, n: int, content_type: str) -> str:
     return f"recordings/{trip_id}/{role}/{n:06d}.{EXTENSIONS[content_type]}"
 
 
-def mark_live(trip_id: str, live: bool) -> None:
-    """Open cases of this ride show LIVE on the dashboard while a phone streams."""
+def mark_live(trip_id: str) -> None:
+    """LIVE on the dashboard while any phone of the ride still streams (each phone's `recordings.<role>.live`).
+    It turns on for open cases only, and off for every case of the ride, including one an agent closed
+    while the phone was still streaming (else that case would show LIVE forever)."""
+    recs = (db().document("trips", trip_id).get().to_dict() or {}).get("recordings") or {}
+    live = any(r.get("live") for r in recs.values())
     for snap in db().collection("incidents").where(filter=FieldFilter("tripId", "==", trip_id)).get():
-        if snap.get("status") in OPEN:
+        inc = snap.to_dict() or {}
+        if bool(inc.get("live")) != live and (not live or inc.get("status") in OPEN):
             snap.reference.update({"live": live})
 
 
@@ -153,8 +158,14 @@ def add_events(trip_id: str, body: EventBatch, user: dict = Depends(current_user
 
 @router.post("/{trip_id}/end")
 def end_trip(trip_id: str, user: dict = Depends(current_user)) -> dict:
-    participant_trip(trip_id, user["uid"])
-    db().document("trips", trip_id).update({"status": "ended", "endedAt": SERVER_TIMESTAMP})
+    trip = participant_trip(trip_id, user["uid"])
+    role = role_of(trip, user["uid"])
+    ended = {"status": "ended", "endedAt": SERVER_TIMESTAMP}
+    # This phone streams no more, even if its last upload never comes (no signal, app killed).
+    if ((trip.get("recordings") or {}).get(role) or {}).get("live"):
+        ended[f"recordings.{role}.live"] = False
+    db().document("trips", trip_id).update(ended)
+    mark_live(trip_id)
     return {"status": "ended"}
 
 
@@ -180,7 +191,7 @@ def save_recording(trip_id: str, body: Recording, background: BackgroundTasks, u
         "review": before.get("review"),
     }})
     if body.live or before.get("live"):
-        mark_live(trip_id, body.live and not body.done)
+        mark_live(trip_id)
     if body.done and before.get("status") != "uploaded":
         background.add_task(review.review_recording, trip_id, role)  # summary + verified flag for the agent
     return {"status": status}
