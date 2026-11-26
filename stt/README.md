@@ -19,6 +19,8 @@ Speech-to-text module for GoSafe: audio file → voice-activity segments → spe
 | `dialog_script.csv` | 24 test sentences (`label` and `speaker` columns are for later tests) |
 | `keywords.txt` | Keywords for the keyword-recall metric |
 | `tests/` | Unit tests. They need only numpy, scipy and soundfile (no torch) |
+| `HANDOFF.md` | Where the work stands for whoever continues: what exists, decisions made and open, next steps, what is only on one laptop ([HANDOFF.md](HANDOFF.md)) |
+| `tools/` | Scripts for the DataHive real phone conversations: `datahive_run.py` runs the pipeline per channel, `datahive_analyze.py` reports hallucinations, speaker changes and classifier alarms |
 | `models/` | Model candidates for the phone, pinned by revision and hash, with measured accuracy ([models/README.md](models/README.md)) |
 | `LLM_INTEGRATION.md` | How an LLM or a service in front of an LLM should use this module: input, how it works, output, how to read it ([LLM_INTEGRATION.md](LLM_INTEGRATION.md)) |
 
