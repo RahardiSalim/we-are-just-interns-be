@@ -1,0 +1,71 @@
+name: mobile
+
+# Builds the Android APK (edge AI models included). Manual only: a run takes about 10 minutes of the free
+# GitHub Actions minutes, so it never starts by itself. Run it from GitHub > Actions > mobile > Run workflow,
+# pick the branch, and download the APK from the run's Artifacts.
+on:
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: Backend the app talks to
+        default: https://gosafe-api-1izo.onrender.com
+      firebase_project:
+        description: Firebase project (public client settings, not secrets)
+        default: gosafe-hackathon
+      firebase_api_key:
+        description: Firebase web API key
+        default: AIzaSyBil3kvICEXNdHfHN8X8dRHj8iL79nrniM
+      firebase_app_id:
+        description: Firebase app ID
+        default: "1:337964600499:web:4aa4bb796049a4b8c4f4c6"
+      firebase_sender_id:
+        description: Firebase sender ID
+        default: "337964600499"
+      run_tests:
+        description: Run flutter analyze and flutter test first
+        type: boolean
+        default: true
+
+# A second run on the same branch cancels the first, so minutes aren't spent twice.
+concurrency:
+  group: mobile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: mobile
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "21" }
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "3.50.1"
+          channel: stable
+          cache: true
+      - run: flutter pub get
+      - if: inputs.run_tests
+        run: flutter analyze
+      - if: inputs.run_tests
+        run: flutter test
+      # arm64 only: nearly every Android phone in use; one ABI keeps the APK at about 174 MB.
+      - run: >
+          flutter build apk --release --split-per-abi --target-platform android-arm64
+          --dart-define=API_URL=${{ inputs.api_url }}
+          --dart-define=USE_EMULATORS=false
+          --dart-define=FIREBASE_PROJECT_ID=${{ inputs.firebase_project }}
+          --dart-define=FIREBASE_API_KEY=${{ inputs.firebase_api_key }}
+          --dart-define=FIREBASE_APP_ID=${{ inputs.firebase_app_id }}
+          --dart-define=FIREBASE_SENDER_ID=${{ inputs.firebase_sender_id }}
+      - run: mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk "GoSafe-${GITHUB_SHA::7}.apk"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: GoSafe-apk
+          path: mobile/GoSafe-*.apk
+          # Artifacts count against the repo's storage quota: keep each APK a week.
+          retention-days: 7
+          compression-level: 0 # an APK is already compressed

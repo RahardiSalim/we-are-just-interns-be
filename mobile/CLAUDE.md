@@ -32,3 +32,4 @@ Commands (from `mobile/`):
 | Run on phone/emulator | `flutter run --dart-define=API_URL=http://10.0.2.2:8000` (emulator) or your tunnel URL |
 | Quick UI preview, no phone | `flutter run -d chrome` with the emulators and backend running (web is for previews only; the product is Android). No login needed |
 | APK | `flutter build apk --dart-define=API_URL=https://...` (needs the Android SDK) |
+| APK from CI | GitHub > Actions > **mobile** > Run workflow (manual only, to save free minutes); the APK is in the run's Artifacts for 7 days |
