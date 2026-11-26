@@ -17,7 +17,7 @@ Commands (from `backend/`, needs `uv`):
 | Task | Command |
 |---|---|
 | Install | `uv sync` |
-| Test | `uv run pytest -q` runs the 15 offline tests; the rest skip without the emulators. Full run: from `firebase/`, `firebase emulators:exec --only auth,firestore "cd ../backend && uv run pytest -q"` (wipes emulator data; re-seed after) |
+| Test | `uv run pytest -q` runs the 16 offline tests; the rest skip without the emulators. Full run: from `firebase/`, `firebase emulators:exec --only auth,firestore "cd ../backend && uv run pytest -q"` (wipes emulator data; re-seed after) |
 | Run | `uv run uvicorn app.main:app --reload` |
 | Seed | `SEED_PASSWORD=... uv run python -m scripts.seed` (accounts are `<uid>@gosafe.test`) |
 | Export contract | `uv run python -m scripts.export_openapi` (after any route change; commit `contracts/openapi.json`) |
