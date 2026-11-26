@@ -111,11 +111,11 @@ Why pieces: if the app is killed, the phone restarts or the battery dies, the ri
 
 ## Hands-free SOS: the safe phrase
 
-On a motorbike, tapping SOS is the hard part. The rider can say a natural-sounding sentence instead, by default **"Pak, nanti lewat jalan biasa aja ya"**. When speech-to-text hears it, the phone sends an SOS **silently**: no dialog and no alarm the driver could notice. The backend always escalates an SOS straight to an agent, and never sends a check-in that would reach the driver.
+On a motorbike, tapping SOS is the hard part. The rider or the driver can say a natural-sounding sentence instead, by default **"Pak, nanti lewat jalan biasa aja ya"**. When speech-to-text hears it, the phone sends an SOS **silently**: no dialog and no alarm the driver could notice. The backend always escalates an SOS straight to an agent, and never sends a check-in that would reach the driver.
 
 - **No model needed.** It matches the speech-to-text output (`lib/engine/safe_phrase.dart`): words are lower-cased and stripped of punctuation, then compared word by word, allowing one slip per six words (a word missed, or a word one letter off, like "aja" → "saja" or "ya" → "yah"). The phrase can sit inside a longer sentence.
 - **Once per ride.** Saying it again doesn't send a second SOS.
-- **Setting it:** today one phrase for everyone, set with `--dart-define=SAFE_PHRASE=...`. A per-rider setting is not built yet.
+- **Setting it:** each person sets their own, rider and driver alike: **Safe phrase → Set / Change** on the home screen. It's kept on the phone, encrypted like the rides (`safe_phrase.enc`), never sent anywhere. 4 to 12 words; shorter phrases are refused because they'd fire by accident. Until one is set, the default is `--dart-define=SAFE_PHRASE=...` ("Pak, nanti lewat jalan biasa aja ya").
 - **Demo:** `flutter run --dart-define=DEMO_SCRIPT=safe_phrase` plays a short ride where the rider says the phrase.
 - **Limits:** it only works as well as speech-to-text hears the rider on a moving motorbike, which needs testing with the real model. Pick a phrase that's rare in normal rides, so it never fires by accident.
 

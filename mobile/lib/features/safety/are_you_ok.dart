@@ -1,5 +1,6 @@
 import 'package:material_ui/material_ui.dart';
 
+import '../../engine/safe_phrase.dart';
 import '../../theme.dart';
 
 /// Short and caring, never alarming. The words people see when something seems wrong.
@@ -58,6 +59,12 @@ abstract final class SafetyText {
       'Record my rides. Only shared if something serious happens.';
   static const noRideWaiting =
       'No ride is waiting for you yet. Ask the rider to start their ride first.';
+
+  static const safePhraseTitle = 'Safe phrase';
+  static const safePhraseHint =
+      'Say this in a ride to call for help without touching your phone. Pick a normal-sounding '
+      "sentence you wouldn't say by chance.";
+  static const safePhraseSaved = 'Safe phrase saved. Only you know it.';
 
   static const helpSent =
       "We're on it. Our safety team will contact you right away.";
@@ -137,3 +144,64 @@ Future<bool> askConsent(BuildContext context) async =>
       ),
     ) ??
     false;
+
+/// Asks for a safe phrase. Returns it trimmed, or null if cancelled.
+Future<String?> askSafePhrase(BuildContext context, String current) =>
+    showDialog<String>(
+      context: context,
+      builder: (context) => _SafePhraseDialog(current: current),
+    );
+
+class _SafePhraseDialog extends StatefulWidget {
+  const _SafePhraseDialog({required this.current});
+  final String current;
+
+  @override
+  State<_SafePhraseDialog> createState() => _SafePhraseDialogState();
+}
+
+class _SafePhraseDialogState extends State<_SafePhraseDialog> {
+  late final _text = TextEditingController(text: widget.current);
+  String? _problem;
+
+  void _save() {
+    final phrase = _text.text.trim();
+    final problem = SafePhrase.problem(phrase);
+    if (problem != null) {
+      setState(() => _problem = problem);
+      return;
+    }
+    Navigator.pop(context, phrase);
+  }
+
+  @override
+  Widget build(BuildContext context) => AlertDialog(
+    icon: const Icon(Icons.record_voice_over, color: GoSafeColors.brand),
+    title: const Text(SafetyText.safePhraseTitle),
+    content: Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      spacing: 12,
+      children: [
+        const Text(SafetyText.safePhraseHint),
+        TextField(
+          controller: _text,
+          autofocus: true,
+          decoration: InputDecoration(
+            hintText: 'Pak, nanti lewat jalan biasa aja ya',
+            errorText: _problem,
+            border: const OutlineInputBorder(),
+          ),
+          onSubmitted: (_) => _save(),
+        ),
+      ],
+    ),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.pop(context),
+        child: const Text('Cancel'),
+      ),
+      FilledButton(onPressed: _save, child: const Text('Save')),
+    ],
+  );
+}

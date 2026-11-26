@@ -85,6 +85,7 @@ class _TripScreenState extends State<TripScreen> {
   bool _warning = false;
   bool _sosOffline = false;
   bool _safePhraseUsed = false;
+  late SafePhrase? _phrase = widget.safePhrase; // the user's own once loaded
   bool _asking = false; // "Are you okay?" is open
   bool _shout = false; // the alarm rings: listening for "tolong"
   bool _live = false;
@@ -111,6 +112,9 @@ class _TripScreenState extends State<TripScreen> {
     widget.api.health().then(
       (up) => mounted ? setState(() => _backendUp = up) : null,
     );
+    widget.store.safePhrase().then((saved) {
+      if (saved != null && mounted) setState(() => _phrase = SafePhrase(saved));
+    });
     // Recordings that couldn't be sent (no signal, app closed mid-ride) go out once they can.
     _sendRecordings();
     _retry = Timer.periodic(
@@ -314,7 +318,7 @@ class _TripScreenState extends State<TripScreen> {
     });
     _ride?.transcript.add({'at': at.inMilliseconds / 1000, 'text': text});
     _persist();
-    if (!_safePhraseUsed && (widget.safePhrase?.heardIn(text) ?? false)) {
+    if (!_safePhraseUsed && (_phrase?.heardIn(text) ?? false)) {
       _safePhraseUsed = true;
       _sos(); // silent: no dialog, no alarm
       return;
@@ -379,6 +383,14 @@ class _TripScreenState extends State<TripScreen> {
     _mark(Marker(_sinceStart, 'sos', verdict: _last?.verdict));
     _goLive();
     if (await _deliver('sos', _last) && mounted) _say(SafetyText.helpSent);
+  }
+
+  Future<void> _editSafePhrase() async {
+    final saved = await askSafePhrase(context, _phrase?.phrase ?? '');
+    if (saved == null || !mounted) return;
+    await widget.store.setSafePhrase(saved);
+    setState(() => _phrase = SafePhrase(saved));
+    _say(SafetyText.safePhraseSaved);
   }
 
   /// "Report driver" / "Report passenger": the team reviews the whole ride after it ends.
@@ -612,6 +624,20 @@ class _TripScreenState extends State<TripScreen> {
                               selected: {_role},
                               onSelectionChanged: (v) =>
                                   setState(() => _role = v.single),
+                            ),
+                          ),
+                          // Both rider and driver have their own: on a motorbike either may be unable to tap.
+                          ListTile(
+                            leading: const Icon(Icons.record_voice_over),
+                            title: const Text(SafetyText.safePhraseTitle),
+                            subtitle: Text(
+                              _phrase == null
+                                  ? 'Not set'
+                                  : '“${_phrase!.phrase}”',
+                            ),
+                            trailing: TextButton(
+                              onPressed: _editSafePhrase,
+                              child: Text(_phrase == null ? 'Set' : 'Change'),
                             ),
                           ),
                           if (_driver)
