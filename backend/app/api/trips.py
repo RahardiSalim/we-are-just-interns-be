@@ -1,14 +1,13 @@
-import json
 from datetime import datetime
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException
+from google.api_core.exceptions import AlreadyExists
 from google.cloud.firestore import SERVER_TIMESTAMP
 from pydantic import BaseModel, Field
 
 from app.core.auth import current_user, require_role
 from app.core.firebase import db
-from app.services.seed import FIXTURES
 
 router = APIRouter(prefix="/trips", tags=["trips"])
 
@@ -16,13 +15,13 @@ DEMO_DRIVER = "driver1"  # shortcut: every demo trip gets the seeded driver; rea
 
 
 class StartTrip(BaseModel):
+    # GoJek's order ID is the trip ID. No location or route is ever sent: GoJek already has it.
+    orderId: str = Field(pattern=r"^[A-Za-z0-9_-]{1,64}$")
     mode: Literal["goride", "gocar"] = "goride"
 
 
 class TripEvent(BaseModel):
-    type: Literal["gps", "sos", "manual_unsafe"]
-    lat: float = Field(ge=-90, le=90)
-    lng: float = Field(ge=-180, le=180)
+    type: Literal["sos", "manual_unsafe"]
     ts: datetime | None = None  # device time; server time when missing
     data: dict = {}
 
@@ -45,21 +44,22 @@ def participant_trip(trip_id: str, uid: str) -> dict:
 @router.post("")
 def start_trip(body: StartTrip, user: dict = Depends(require_role("rider"))) -> dict:
     users = {uid: (db().document("users", uid).get().to_dict() or {}) for uid in (user["uid"], DEMO_DRIVER)}
-    ref = db().collection("trips").document()
-    ref.set({
-        "riderId": user["uid"],
-        "driverId": DEMO_DRIVER,
-        "mode": body.mode,
-        "status": "active",
-        "plannedRoute": json.loads((FIXTURES / "demo-trip.json").read_text())["polyline"],
-        "consent": {
-            "rider": users[user["uid"]].get("audioConsent", False),
-            "driver": users[DEMO_DRIVER].get("audioConsent", False),
-        },
-        "startedAt": SERVER_TIMESTAMP,
-        "endedAt": None,
-    })
-    return {"tripId": ref.id}
+    try:
+        db().document("trips", body.orderId).create({
+            "riderId": user["uid"],
+            "driverId": DEMO_DRIVER,
+            "mode": body.mode,
+            "status": "active",
+            "consent": {
+                "rider": users[user["uid"]].get("audioConsent", False),
+                "driver": users[DEMO_DRIVER].get("audioConsent", False),
+            },
+            "startedAt": SERVER_TIMESTAMP,
+            "endedAt": None,
+        })
+    except AlreadyExists:
+        raise HTTPException(409, "A trip for this order already exists")
+    return {"tripId": body.orderId}
 
 
 @router.post("/{trip_id}/events")

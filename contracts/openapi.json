@@ -830,6 +830,11 @@
       },
       "StartTrip": {
         "properties": {
+          "orderId": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9_-]{1,64}$",
+            "title": "Orderid"
+          },
           "mode": {
             "type": "string",
             "enum": [
@@ -841,6 +846,9 @@
           }
         },
         "type": "object",
+        "required": [
+          "orderId"
+        ],
         "title": "StartTrip"
       },
       "TranscriptLine": {
@@ -874,23 +882,10 @@
           "type": {
             "type": "string",
             "enum": [
-              "gps",
               "sos",
               "manual_unsafe"
             ],
             "title": "Type"
-          },
-          "lat": {
-            "type": "number",
-            "maximum": 90.0,
-            "minimum": -90.0,
-            "title": "Lat"
-          },
-          "lng": {
-            "type": "number",
-            "maximum": 180.0,
-            "minimum": -180.0,
-            "title": "Lng"
           },
           "ts": {
             "anyOf": [
@@ -913,9 +908,7 @@
         },
         "type": "object",
         "required": [
-          "type",
-          "lat",
-          "lng"
+          "type"
         ],
         "title": "TripEvent"
       },

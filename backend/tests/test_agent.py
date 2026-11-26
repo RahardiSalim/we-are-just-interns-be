@@ -37,7 +37,7 @@ def test_cases_still_in_check_in_cannot_be_opened(client, login, db):
 def test_no_clip_means_404_and_no_audit_entry(client, login, db):
     login("rider1")
     client.post("/me/consent", json={"audioConsent": False})
-    incident_id = report(client, client.post("/trips", json={}).json()["tripId"], trigger="sos")
+    incident_id = report(client, client.post("/trips", json={"orderId": "GR-2001"}).json()["tripId"], trigger="sos")
     login("agent1")
     assert client.get(f"/incidents/{incident_id}/clip-url").status_code == 404
     assert audit(db) == []

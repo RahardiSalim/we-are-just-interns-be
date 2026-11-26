@@ -12,7 +12,7 @@ const deleteAt = at("2026-12-03T12:00:00Z");
 export const mockIncidents: Incident[] = [
   {
     id: "demo-incident-1",
-    tripId: "demo-trip-1",
+    tripId: "GR-DEMO-1",
     reportedBy: "rider1",
     trigger: "sos",
     status: "escalated",
@@ -35,7 +35,7 @@ export const mockIncidents: Incident[] = [
   },
   {
     id: "demo-incident-2",
-    tripId: "demo-trip-2",
+    tripId: "GR-DEMO-2",
     reportedBy: "rider2",
     trigger: "manual_unsafe",
     status: "under_review",
@@ -57,7 +57,7 @@ export const mockIncidents: Incident[] = [
   },
   {
     id: "demo-incident-3",
-    tripId: "demo-trip-3",
+    tripId: "GR-DEMO-3",
     reportedBy: "rider1",
     trigger: "sos",
     status: "escalated",

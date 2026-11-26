@@ -16,27 +16,29 @@ Read by: owner, agents.
 
 ## trips/{tripId}
 
+`tripId` is the GoJek order ID. No location, route or GPS is stored anywhere; GoJek holds those.
+
 | Field | Type |
 |---|---|
 | `riderId`, `driverId` | uid |
 | `mode` | `goride` \| `gocar` |
 | `status` | `active` \| `ended` |
-| `plannedRoute` | encoded polyline |
 | `consent` | `{ rider: bool, driver: bool }` |
 | `startedAt`, `endedAt` | timestamp |
 
 Read by: rider, driver, agents.
 
-## trips/{tripId}/events/{eventId}
+## trips/{tripId}
+
+`tripId` is the GoJek order ID. No location, route or GPS is stored anywhere; GoJek holds those./events/{eventId}
 
 | Field | Type |
 |---|---|
-| `type` | `gps` \| `stop` \| `deviation` \| `sos` \| `manual_unsafe` \| `warning` (planned) \| `checkin_sent` \| `checkin_reply` |
+| `type` | `sos` \| `manual_unsafe` \| `warning` (planned) |
 | `ts` | timestamp |
-| `lat`, `lng` | number |
 | `data` | map (for `warning`: `{label, score, by}`) |
 
-Read by: agents. (`stop` and `deviation` are kept in the enum but nothing produces them yet; see ARCHITECTURE.md Decisions.)
+Read by: agents.
 
 ## incidents/{incidentId}
 

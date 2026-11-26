@@ -8,7 +8,7 @@ Single source of truth for building the three apps. Where the earlier "System de
 |---|---|---|
 | Android app | Flutter (Android only) | Listens for the whole trip on both phones (see "On-device listening"). Foreground service with the `microphone` type; `sherpa_onnx` for voice detection + Whisper; ONNX Runtime for IndoBERT. |
 | Backend | FastAPI on Cloud Run | Same Google project as Firebase, so Firestore, Storage and FCM work with no extra keys. No speech or classifier models on the server: those run on the phones. |
-| Database | Firestore | Not relational, no geo queries: route maths in Python. |
+| Database | Firestore | Not relational. Holds no location data (see "No location data"). |
 | Files | Cloud Storage for Firebase | Requires the **Blaze** plan (fails with 402/403 on Spark). Add a budget alert. |
 | Dashboard | Next.js on Vercel (Hobby) | No ML and no secrets in Next.js. Reads Firestore, calls FastAPI. |
 | Repo | One monorepo | Vercel and Cloud Run both deploy from a sub-folder. |
@@ -74,8 +74,8 @@ Every endpoint takes `Authorization: Bearer <Firebase ID token>`; the backend ch
 | `GET /health` | Anyone | Liveness |
 | `POST /me/fcm-token` | App | Saves the device push token |
 | `POST /me/consent` | App | Sets `audioConsent` |
-| `POST /trips` | App (rider) | Starts a demo trip with a fixture route and a driver; returns `tripId` |
-| `POST /trips/{id}/events` | App | Batch of GPS points or SOS / manual-unsafe events (stored only, see Decisions) |
+| `POST /trips` | App (rider) | Body: `orderId` (the GoJek order ID, which becomes the `tripId`), `mode`. Assigns the demo driver; 409 if the order already has a trip |
+| `POST /trips/{id}/events` | App | Batch of SOS / manual-unsafe events with a timestamp. No location fields |
 | `POST /trips/{id}/end` | App | Ends the trip |
 | `POST /incidents` | App | Body: `tripId`, `trigger`, window start/end, optional `deviceTranscript`, `deviceLabel`, `deviceScore`. Returns `incidentId` + signed upload URL (10 min) |
 | `POST /incidents/{id}/finalize` | App | Clip uploaded; returns 202 and starts processing |
@@ -148,7 +148,7 @@ One shared Firebase + GCP project, emulators locally, a `DEMO_MODE` flag instead
 |---|---|
 | 1. Walking skeleton | App logs in, calls `/health`, dashboard shows a seeded incident live |
 | 2. Core flow | One full incident (SOS → on-phone transcript and label → upload → check-in → escalate → ticket) works on the deployed stack |
-| 3. Polish | Timeline map, LLM summary, Safe Ride badge, metrics. Demo script runs twice with no fixes |
+| 3. Polish | Event timeline, LLM summary, Safe Ride badge, metrics. Demo script runs twice with no fixes |
 | 4. Freeze | Last deploy hours before judging; tag the commit; backup video recorded |
 
 Demo-day checklist: call `/health` to warm Cloud Run, reset + seed, phone charged with mobile data on, dashboard open and logged in, backup video one click away.
@@ -162,7 +162,7 @@ Waiting on something outside the code. Build around these with stubs or seed dat
 | IndoBERT classifier (ONNX int8) | Modelling team: dataset + fine-tune + export | Seeded incidents carry a fixed `label` and `score` |
 | Sahabat-AI summary | A hosted endpoint (`LLM_BASE_URL`, `LLM_API_KEY`) | Seeded summary |
 | On-device Whisper + IndoBERT | Modelling team: ONNX exports, the warning/high thresholds, a speed and battery benchmark on a mid-range phone | The app sends a canned transcript and label so the backend flow can be tested |
-| Sample audio + real GPS trace | Team recordings | `contracts/fixtures/demo-trip.json` (hand-made route), `clipPath: null` |
+| Sample audio | Team recordings | `clipPath: null` in the seed |
 | Firebase project | Blaze plan + budget alert | Emulators (`demo-gosafe`) |
 | Backend deploy | GitHub repo variables `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA` (Workload Identity Federation) | Run locally |
 | Mobile listening service | Android SDK + a real phone (the microphone service can't run in the web preview) | Mock trip screen in `mobile/` |
@@ -180,4 +180,4 @@ Waiting on something outside the code. Build around these with stubs or seed dat
 - **Retention:** 7 days by default, 30 days while a case is escalated, back to 7 days once closed.
 
 - **The phone listens and judges** (replaces the earlier "backend decides severity, phone only on button press" plan). See "On-device listening". Button reports still go through the backend's severity rules.
-- **No trip-anomaly rules.** GoTo already records trip anomalies. `POST /trips/{id}/events` only stores GPS and SOS / manual-unsafe events for the timeline map.
+- **No location data.** The app never records or sends GPS, location or route, and the backend stores none. A trip is identified by the GoJek order ID; GoJek already has the route, location and trip anomalies, and an agent looks them up there by order ID. `POST /trips/{id}/events` only stores SOS / manual-unsafe events with timestamps.
