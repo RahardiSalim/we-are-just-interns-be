@@ -351,3 +351,19 @@ Start the emulators, seed data and backend as described in the root [CLAUDE.md](
 | Real phone, same Wi-Fi | Run `scripts/demo.sh` from the repo root, then the `flutter run` line it prints | Works |
 
 Claude Code's browser pane blocks microphones, so there the app takes the "not recording" path.
+
+### Against a real Firebase project and a deployed backend
+
+The app talks to the emulators unless told otherwise. For a real project (for example the demo's `gosafe-hackathon` with the backend on Render) pass the project's public client settings; there is no `google-services.json` to add:
+
+```bash
+flutter run \
+  --dart-define=USE_EMULATORS=false \
+  --dart-define=API_URL=https://<backend host> \
+  --dart-define=FIREBASE_PROJECT_ID=<project id> \
+  --dart-define=FIREBASE_API_KEY=<Android app API key> \
+  --dart-define=FIREBASE_APP_ID=<Android app id, 1:<number>:android:<hash>> \
+  --dart-define=FIREBASE_SENDER_ID=<project number>
+```
+
+Take the values from Firebase console > Project settings > Your apps > the Android app (package `com.gosafe.gosafe`), or `firebase apps:sdkconfig ANDROID <app id> --project <project id>`. The same flags work for `flutter build apk`. Anonymous sign-in must be enabled in Firebase Authentication. Without these flags the app keeps using the offline `demo-gosafe` emulator project.
