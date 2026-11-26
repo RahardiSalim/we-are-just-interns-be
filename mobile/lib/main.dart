@@ -5,10 +5,12 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'features/safety/are_you_ok.dart' show SafetyText;
 import 'features/trip/trip_screen.dart';
 import 'services/api.dart';
 import 'services/mock_listener.dart';
 import 'services/recorder.dart';
+import 'services/ride.dart';
 import 'theme.dart';
 
 // shortcut: only the local emulators exist so far (offline project demo-gosafe). Use real
@@ -83,6 +85,15 @@ class GoSafeApp extends StatelessWidget {
             .where('status', isEqualTo: 'sent')
             .snapshots()
             .map((q) => [for (final d in q.docs) d.id]),
+        // Lock-screen alerts are Android-only; the web preview shows the dialog alone.
+        alert: kIsWeb
+            ? null
+            : ({required loud}) => Ride.alert(
+                SafetyText.askTitle,
+                SafetyText.askAlertBody,
+                loud: loud,
+              ),
+        clearAlert: kIsWeb ? null : Ride.clearAlert,
       ),
     );
   }

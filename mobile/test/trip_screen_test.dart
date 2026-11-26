@@ -86,6 +86,7 @@ class Harness {
   final recorder = FakeRecorder();
   final heard = StreamController<String>();
   final checkins = StreamController<List<String>>();
+  final alerts = <String>[];
   bool driverSafeRide = true;
 
   Future<void> pump(WidgetTester tester) async {
@@ -100,6 +101,9 @@ class Harness {
             driverConsent: driverSafeRide,
           ),
           checkins: checkins.stream,
+          alert: ({required loud}) async =>
+              alerts.add(loud ? 'alarm' : 'alert'),
+          clearAlert: () async => alerts.add('clear'),
         ),
       ),
     );
@@ -276,4 +280,26 @@ void main() {
     expect(find.text(SafetyText.askTitle), findsNothing);
     expect(h.api.calls, ['reply:c1:true']);
   });
+
+  testWidgets(
+    'a high flag sounds the alarm until answered; a check-in alerts quietly',
+    (tester) async {
+      final h = Harness();
+      await h.pump(tester);
+      await h.startRide(tester);
+      await h.say(tester, uncomfortable);
+      expect(h.alerts, isEmpty, reason: 'a warning never sounds an alarm');
+      await h.say(tester, harassment);
+      expect(h.alerts, ['alarm']);
+      await tester.tap(find.text(SafetyText.askOk));
+      await tester.pumpAndSettle();
+      expect(h.alerts, ['alarm', 'clear']);
+
+      h.checkins.add(['c1']);
+      await tester.pumpAndSettle();
+      await tester.tap(find.text(SafetyText.askOk));
+      await tester.pumpAndSettle();
+      expect(h.alerts, ['alarm', 'clear', 'alert', 'clear']);
+    },
+  );
 }

@@ -13,10 +13,13 @@ This guide describes the app as it is built today. The product decisions behind 
 | Decision engine (30 s window, classifier, rules) | Built and tested |
 | Warning, high flag sent at once, "Are you okay?", SOS, "I feel unsafe" | Built and tested |
 | Full recording uploaded after a high or SOS ride, deleted otherwise | Built and tested |
-| Answering backend check-ins | Built (reads Firestore directly; push notifications not yet) |
+| Answering backend check-ins | Built (reads Firestore directly) |
 | Voice detection, speech-to-text | **Temporary**: a scripted conversation stands in |
 | Classifier | **Temporary**: an Indonesian keyword filter stands in for IndoBERT |
-| Recording in the background (foreground service), encryption on the phone | Not built: the app must stay open during the ride |
+| Recording in the background | Built: a microphone foreground service ("GoSafe is keeping this ride safe") keeps recording and listening with the screen locked. Tested on the Android emulator |
+| Alarm on a high flag, alert for check-ins | Built: a high flag sounds the phone's alarm (alarm sound, vibration, repeating) until someone answers "Are you okay?"; a backend check-in shows a normal alert. No Firebase needed: the service keeps the app alive during the ride |
+| Encryption on the phone | Built: the recording is AES-256-GCM encrypted with an Android Keystore key the moment recording stops, and decrypted only to upload |
+| Push when the app is fully closed | Not built: needs FCM and a real Firebase project. During a ride the service keeps the app open, so it isn't needed then |
 
 ## How one ride works
 
@@ -192,6 +195,8 @@ Other calls: `POST /trips` (with `riderConsent`), `POST /trips/{id}/end` and `PO
 - No location: no permission, no GPS, no route.
 - During the ride only high flags and button presses leave the phone.
 - The full recording leaves the phone only after a ride with a high flag or SOS. Otherwise it's deleted.
+- The recording lives in the app's private folder, encrypted once the ride ends (the key never leaves the Android Keystore). The next ride start deletes the last ride's file.
+- While recording, Android always shows the "GoSafe is keeping this ride safe" notification: listening is never hidden.
 - A person at customer service reviews every case. The app never warns, suspends or bans a driver on its record.
 
 ## Code map
@@ -204,7 +209,9 @@ Other calls: `POST /trips` (with `riderConsent`), `POST /trips/{id}/end` and `PO
 | `lib/features/safety/are_you_ok.dart` | All the wording (`SafetyText`), the consent prompt and the "Are you okay?" dialog |
 | `lib/engine/safety_engine.dart` | The 30-second window, the decision rules, and `Marker` |
 | `lib/engine/classifier.dart` | The `Classifier` interface and the temporary keyword filter |
-| `lib/services/recorder.dart` | Microphone recording for the whole ride (`TripRecorder`: start, stop, discard) |
+| `lib/services/recorder.dart` | Microphone recording for the whole ride (`TripRecorder`: start, stop, discard), encrypted at stop |
+| `lib/services/ride.dart` | The channel to the Android side: listening service, alerts, encryption |
+| `android/app/src/main/kotlin/com/gosafe/gosafe/` | `MainActivity` (the channel), `RideService` (foreground service and `Alerts` notification channels), `Vault` (Keystore AES-GCM) |
 | `lib/services/api.dart` | Calls to the backend, including the recording upload |
 | `lib/services/mock_listener.dart` | The scripted conversation standing in for voice detection and speech-to-text |
 
@@ -234,6 +241,6 @@ Start the emulators, seed data and backend as described in the root [CLAUDE.md](
 |---|---|---|
 | Chrome | `flutter run -d chrome` | Works; Chrome asks for permission |
 | Android emulator | `flutter run` (reaches this Mac at `10.0.2.2`) | Uses the Mac's microphone |
-| Real phone, same Wi-Fi | `flutter run --dart-define=API_URL=http://<Mac IP>:8000 --dart-define=EMULATOR_HOST=<Mac IP>`, after adding `"host": "0.0.0.0"` to the auth, firestore and storage emulators in `firebase/firebase.json` and starting the backend with `--host 0.0.0.0` | Works |
+| Real phone, same Wi-Fi | Run `scripts/demo.sh` from the repo root, then the `flutter run` line it prints | Works |
 
 Claude Code's browser pane blocks microphones, so there the app takes the "not recording" path.

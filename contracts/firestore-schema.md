@@ -1,6 +1,6 @@
 # Firestore schema
 
-Data truth for all three apps. Only the backend writes; clients read. Audio lives in Cloud Storage, never in Firestore. All timestamps are UTC server time.
+Data truth for all three apps. Only the backend writes; clients read. Audio lives in object storage (Cloudflare R2 when `R2_BUCKET` is set, otherwise Firebase Storage or its emulator), never in Firestore. All timestamps are UTC server time.
 
 ## users/{uid}
 
@@ -24,14 +24,28 @@ Read by: owner, agents.
 | `mode` | `goride` \| `gocar` |
 | `status` | `active` \| `ended` |
 | `consent` | `{ rider: bool, driver: bool }`: rider from the consent prompt, driver from their Safe Ride setting (`users.audioConsent`) |
-| `recording` | after a flagged ride: `{ path, contentType, durationSec, markers: [ { at, kind: warning \| high \| sos \| manual_unsafe, label, score, text } ], status: awaiting_upload \| uploaded, uploadedBy, createdAt, uploadedAt }` |
+| `recording` | only after a ride with a high flag or SOS; see below |
 | `startedAt`, `endedAt` | timestamp |
 
 Read by: rider, driver, agents.
 
-## trips/{tripId}
+### `trips/{tripId}.recording`
 
-`tripId` is the GoJek order ID. No location, route or GPS is stored anywhere; GoJek holds those./events/{eventId}
+One per ride, however many incidents the ride has. Every incident of the ride reaches it through `incidents.tripId`.
+
+| Field | Type |
+|---|---|
+| `path` | object key of the audio, `recordings/{tripId}.m4a` (or `.ogg` / `.wav`) |
+| `contentType` | `audio/mp4` \| `audio/ogg` \| `audio/wav` |
+| `durationSec` | number |
+| `markers` | `[ { at, kind: warning \| high \| sos \| manual_unsafe, label, score, text } ]`: the phone's flags, `at` in seconds from the start of the recording |
+| `transcript` | `[ { at, end, text } ]`: the phone's speech-to-text for the whole ride, seconds from the start |
+| `status` | `awaiting_upload` \| `uploaded` |
+| `uploadedBy` | uid |
+| `createdAt`, `uploadedAt` | timestamp |
+| `review` | written after upload: `{ source: sahabat-ai \| gemini \| rules, model, summary, label, confidence, moments: [ { at, label, reason } ], note, createdAt }`. Phone numbers are masked; every `moments.at` is a real transcript line |
+
+## trips/{tripId}/events/{eventId}
 
 | Field | Type |
 |---|---|
@@ -55,7 +69,7 @@ Read by: agents.
 | `score` | number 0–1 |
 | `transcript` | `[ { start, end, text, flagged } ]` (seconds from window start) |
 | `summary` | string (LLM, escalations only) |
-| `clipPath` | Cloud Storage path |
+| `clipPath` | object storage key of the reporter's clip, if any |
 | `source` | `device` \| `cloud` |
 | `assignedAgent` | uid |
 | `decision` | `{ action: dismiss \| warn_driver \| suspend_driver \| contact_rider, note, agentId, ts }` |
@@ -91,7 +105,7 @@ Read by: agents. Written by: backend only.
 ## Retention
 
 - Firestore TTL policy on `incidents.deleteAt`.
-- Cloud Storage lifecycle rule deletes clips after 7 days.
+- Object storage: a lifecycle rule deletes clips after 7 days (on R2, set it in the bucket's Object Lifecycle Rules).
 - Open cases push `deleteAt` forward.
 - On the phone: the ride recording is deleted after the ride unless it was flagged high or had an SOS, in which case it's uploaded and then deleted from the phone.
 

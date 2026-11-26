@@ -21,6 +21,8 @@ class TripScreen extends StatefulWidget {
     required this.tripInfo,
     required this.checkins,
     this.engine,
+    this.alert,
+    this.clearAlert,
   });
 
   final Api api;
@@ -35,6 +37,11 @@ class TripScreen extends StatefulWidget {
   /// IDs of this user's unanswered backend check-ins (after an "I feel unsafe" press).
   final Stream<List<String>> checkins;
   final SafetyEngine Function()? engine;
+
+  /// A phone notification that reaches the user even with the screen off. `loud`: a repeating
+  /// alarm, for a high flag. Null on the web preview.
+  final Future<void> Function({required bool loud})? alert;
+  final Future<void> Function()? clearAlert;
 
   @override
   State<TripScreen> createState() => _TripScreenState();
@@ -178,14 +185,22 @@ class _TripScreenState extends State<TripScreen> {
         _guard(() async {
           await widget.api.report(_tripId!, 'auto', d);
         });
-        _askAreYouOk((ok) => ok ? _say(SafetyText.okThanks) : _report('sos'));
+        _askAreYouOk(
+          (ok) => ok ? _say(SafetyText.okThanks) : _report('sos'),
+          loud: true,
+        );
       case SafetyAction.none:
         break;
     }
   }
 
-  void _askAreYouOk(void Function(bool ok) answer) =>
-      askAreYouOk(context).then((ok) => ok == null ? null : answer(ok));
+  void _askAreYouOk(void Function(bool ok) answer, {bool loud = false}) {
+    widget.alert?.call(loud: loud);
+    askAreYouOk(context).then((ok) {
+      widget.clearAlert?.call();
+      if (ok != null) answer(ok);
+    });
+  }
 
   void _onCheckins(List<String> ids) {
     for (final id in ids.where(_answered.add)) {
