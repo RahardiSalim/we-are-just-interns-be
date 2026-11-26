@@ -7,7 +7,7 @@ import 'package:gosafe/engine/safety_engine.dart';
 import 'package:gosafe/services/dev_ml.dart';
 
 /// Replays eval transcripts (stt/eval/score.py transcribe) through the app's own decision code:
-/// the keywords + team model (DevClassifier), the safe phrase, and SafetyEngine's rules.
+/// the keywords + team model (ModelClassifier), the safe phrase, and SafetyEngine's rules.
 /// Skipped unless EVAL_ASR is set; stt/eval/run.sh runs it.
 void main() {
   final input = Platform.environment['EVAL_ASR'];
@@ -21,7 +21,7 @@ void main() {
     final out = [];
     for (final f in jsonDecode(File(input!).readAsStringSync()) as List) {
       final lines = (f['lines'] as List).cast<Map<String, dynamic>>();
-      final clf = DevClassifier(Uri.parse('http://unused'));
+      final clf = ModelClassifier((_) async => ('normal', 0.5));
       for (final l in lines) {
         final m = l['model'] as List;
         clf.raw[l['text'] as String] = (

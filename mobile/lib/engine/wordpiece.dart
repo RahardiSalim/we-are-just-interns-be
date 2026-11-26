@@ -58,7 +58,7 @@ class WordPiece {
 
   static final _space = RegExp(r'\s');
   static final _unicodePunct = RegExp(r'\p{P}', unicode: true);
-  static final _format = RegExp(r'[\p{Cc}\p{Cf}]', unicode: true);
+  static final _format = RegExp(r'\p{C}', unicode: true); // every "C" category, as BertTokenizer
 
   static bool _control(int r) =>
       r != 9 && r != 10 && r != 13 && _format.hasMatch(String.fromCharCode(r));

@@ -30,3 +30,5 @@ flutter:
   assets:
     - assets/illustrations/
     - assets/ride/
+    - assets/brand/
+    - assets/models/ # edge AI: speech-to-text and classifier (lib/services/edge_ai.dart)

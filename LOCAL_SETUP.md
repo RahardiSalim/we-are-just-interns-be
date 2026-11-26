@@ -60,7 +60,8 @@ Nothing below is committed, and none of it should ever be. Ask the owner in the 
 | Firebase service-account key | Lets the backend or `scripts.seed` act as admin on `gosafe-hackathon`. Only needed to run the backend or seed against the real project | A file **outside the repo**, then `GOOGLE_APPLICATION_CREDENTIALS=/path/to/key.json`. On Render it is a Secret File | Akmal (Firebase console > Project settings > Service accounts) |
 | `dashboard/.env.local` | Public Firebase web config | `dashboard/.env.local` (git-ignored) | Firebase console |
 | `google-services.json` | Android Firebase config | Not needed with the emulators. Not wired for the real project yet (see section 6) | |
-| STT model | `maleo-ai/whisper-small-id`, whisper.cpp ggml q8_0, 264.5 MB. Public, pinned by revision and hash | `stt/models/maleo-small-id-q8_0/`, download commands in [stt/models/README.md](stt/models/README.md) | Hugging Face |
+| Phone models | Whisper maleo base, Silero VAD, IndoBERT-lite clf-lite-5x (ONNX), about 118 MB | **Committed** in `mobile/assets/models/`: nothing to download for the app | In the repo |
+| STT model for the laptop benchmark | `maleo-ai/whisper-small-id`, whisper.cpp ggml q8_0, 264.5 MB. Public, pinned by revision and hash | `stt/models/maleo-small-id-q8_0/`, download commands in [stt/models/README.md](stt/models/README.md) | Hugging Face |
 | Text classifier | DistilBERT, 11 labels, 268 MB. **Cannot be rebuilt; provenance unknown and not validated** | A folder **outside the repo** (it is over GitHub's 100 MB file limit and never goes in git). Point scripts at it with a path | The classifier owner, shared as a zip |
 | Audio and datasets | Recordings, noisy test sets, the DataHive conversations (CC BY 4.0, Hugging Face) | Git-ignored folders in `stt/`. Never commit audio | Download or record again |
 | Settings on other people's accounts | Cloudflare R2 CORS policy, Render env vars and Secret File, Vercel env vars, Firebase Auth sign-in methods and rules | Not files: they live in each service's dashboard | See the checklist below |
@@ -84,7 +85,7 @@ Nothing below is committed, and none of it should ever be. Ask the owner in the 
 
 ## 6. Known limits (read before a demo)
 
-- **On-device AI is stand-in.** The app's speech input is a scripted conversation (`mobile/lib/services/mock_listener.dart`) and its classifier is a keyword filter. The real models are not wired into the phone.
+- **Edge AI is tested on the emulator only.** On Android the app transcribes and classifies on the phone (`mobile/lib/services/edge_ai.dart`). Speed, memory and battery on a real phone were not measured, and the emulator's microphone gives silence, so live speech was tested only from a WAV file (`WHISPER_TEST_WAV`). `DEMO_SCRIPT=demo` plays the scripted conversation instead.
 - **The mobile app only knows the emulators.** `mobile/lib/main.dart` hard-codes the offline project `demo-gosafe`. Using `gosafe-hackathon` needs a code change (Firebase options from `--dart-define`) and an Android app registered in Firebase.
 - **Render free tier sleeps**, and OpenRouter free models are rate-limited (HTTP 429). Without the LLM the review falls back to rules.
 - **The review source is labelled "Sahabat-AI"** for any LLM, because the schema has only that value. Whatever model is configured, the dashboard shows that name.

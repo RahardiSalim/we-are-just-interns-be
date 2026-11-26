@@ -139,20 +139,22 @@ flowchart LR
     R -- high --> Z[Flag sent to the backend at once + Are you okay?]
 ```
 
-The microphone really records. Voice detection and speech-to-text (the dotted part) are still in the making, so `mock_listener.dart` stands in: it plays a scripted Indonesian conversation, one line every 3 seconds. Everything from the window onwards is the real logic.
+The microphone really records. On Android, voice detection, speech-to-text and the classifier all run **on the phone** (edge AI, see "Edge AI on the phone" below). The web preview and `--dart-define=DEMO_SCRIPT=demo` use `mock_listener.dart` instead: a scripted Indonesian conversation, one line every 3 seconds.
 
 ### Step 1: the 15-second window
 
 Every finished utterance is added to a list with the time it was heard. Lines older than 15 seconds are dropped. The classifier always judges the whole window, so a remark is read in context. When the phone sends a flag, this window is the evidence; each line's `start` and `end` are seconds from the first line in the window.
 
-### Step 2: the classifier (temporary keyword filter)
+### Step 2: the classifier (keywords + IndoBERT-lite)
+
+On the phone, `ModelClassifier` (`lib/services/dev_ml.dart`) combines two judges line by line: the keywords below decide on their own, and the IndoBERT-lite model alone adds a warning at 0.9 or more (never on "victim" speech alone); threat or sexual from the model alone needs 2 lines in the window. With a scripted conversation only the keywords run.
 
 `KeywordClassifier` looks for Indonesian phrases, including Jakarta slang, in three groups:
 
 | Label | Example phrases |
 |---|---|
 | `threat` | bunuh, pukul, hajar, pisau, culik, "diem aja", "jangan banyak tanya", "tahu rumah", "jangan lapor" |
-| `sexual_harassment` | "cantik banget", seksi, pegang, cium, raba, "ke hotel", "mampir ke tempat", "tempat saya", "buka baju" |
+| `sexual_harassment` | "cantik banget", seksi, "pegang-pegang", "pegang tangan", cium, raba, "ke hotel", "mampir ke tempat", "tempat saya", "buka baju" |
 | `uncomfortable` | "tinggal sendiri", sendirian, "punya pacar", "rumahnya di mana", "minta nomor", "umur berapa", sayang |
 
 How it scores the window:
@@ -335,20 +337,44 @@ Other calls: `POST /trips` (with `riderConsent`, or `role: driver`), `POST /me/c
 | `lib/services/ride.dart` | The channel to the Android side: listening service, alerts, dialer, seal and open |
 | `android/app/src/main/kotlin/com/gosafe/gosafe/` | `MainActivity` (the channel), `RideService` (foreground service and `Alerts` notification channels), `Vault` (Keystore AES-GCM) |
 | `lib/services/api.dart` | Calls to the backend, including the recording upload |
-| `lib/services/mock_listener.dart` | The scripted conversation standing in for voice detection and speech-to-text |
+| `lib/services/edge_ai.dart` | Edge AI: copies the bundled models out once, runs speech-to-text, scores each line with the ONNX classifier |
+| `lib/services/on_device_stt.dart` | whisper.cpp on the phone (`whisper_ggml`): pieces, carry-over, the hallucination filter (`SpeechFilter`) |
+| `lib/services/dev_ml.dart` | `ModelClassifier` (keywords + model rules), and the laptop listener for the web preview |
+| `lib/engine/wordpiece.dart` | The classifier's tokenizer, ported from Python's BertTokenizer |
+| `assets/models/` | The bundled models: Whisper maleo base (82 MB), Silero VAD (0.9 MB), clf-lite-5x as ONNX (35 MB), its vocabulary and labels |
+| `lib/services/mock_listener.dart` | The scripted conversation for the web preview and `DEMO_SCRIPT` |
 
-## Swapping in the real models
+## Edge AI on the phone
 
-Two interfaces keep the stand-ins replaceable without touching the screen or the engine:
+On Android the ride is transcribed and judged **on the phone**, with models bundled in the app (`assets/models/`). Nothing is needed beyond `flutter run`: no model download, no laptop.
 
-- **Speech:** `TripScreen.listen` is a `Stream<String> Function()`, one finished utterance per item. Replace `scriptedListener` with a sherpa_onnx listener that runs Silero voice detection, then Whisper on each utterance. It can read the same microphone audio the recorder captures.
-- **Classifier:** `Classifier.classify(List<String> lines)` returns a label, a score and per-line flags. Replace `KeywordClassifier` with IndoBERT in ONNX Runtime, plus a Dart port of its tokenizer.
+| Part | Model | Size | Runs with |
+|---|---|---|---|
+| Voice detection | Silero v5.1.2 (ggml) | 0.9 MB | whisper.cpp |
+| Speech-to-text | Whisper maleo base, Indonesian (ggml q8_0) | 82 MB | whisper.cpp (`whisper_ggml`) |
+| Classifier | IndoBERT-lite clf-lite-5x, 5 labels (ONNX) | 35 MB | ONNX Runtime (`flutter_onnxruntime`) |
 
-Then set the real thresholds in `SafetyEngine`.
+- At the first ride the models are copied once from the app to its private folder (whisper.cpp reads a file path).
+- The classifier's word table is int8; the rest stays float. On 735 test sentences that changed no label and no 0.9 decision; full int8 (12 MB) changed 10. Re-export: `stt/eval/export_onnx.py`.
+- The transcript and labels are never shown to the rider or driver. They go to the safety team with a flag (`deviceTranscript`, `deviceLabel`, `deviceScore`), as before. Only the laptop test mode (`DEV_ML`) lists them on screen.
+- Checked on the Android emulator (arm64, Android 16, on a Mac): a 23.7 s recording of the threat script, fed with `WHISPER_TEST_WAV`, was transcribed in 6.1 s, raised the high flag, went Live, and the case showed on the dashboard.
+- The release APK for arm64 phones is 174 MB (`flutter build apk --release --split-per-abi`, measured 2026-11-27): the models are 118 MB of it. Google Play's limit for the base download is 200 MB; past that the models would move to a Play asset pack.
+- **Not measured on a real phone:** speed, memory, battery, APK size in the Play Store. The emulator's microphone gives only silence, so the live microphone path (the recorder and the speech-to-text reading the mic at the same time) was not heard with real speech. Android 10+ lets one app read the mic twice; on Android 8 and 9 the second reader may get silence.
+
+| Flag | What it does |
+|---|---|
+| `--dart-define=DEMO_SCRIPT=demo` | The scripted conversation instead of edge AI (also `safe_phrase`, or a scenario from `lib/engine/scenarios.dart`) |
+| `--dart-define=WHISPER_MODEL=<path>` / `WHISPER_VAD=<path>` | Another ggml model on the phone instead of the bundled one |
+| `--dart-define=WHISPER_TEST_WAV=<path>` | Hear a 16 kHz mono WAV instead of the microphone, to test without a mic |
+| `--dart-define=WHISPER_CHUNK_SECS=6` | Audio is decoded in pieces this long. Shorter shows words sooner and works the phone harder |
+
+On an emulator (debug build) the app can only read its own private folder, so copy a test WAV in with `adb push` to `/data/local/tmp/`, then `adb shell run-as com.gosafe.gosafe cp ... files/` and use `/data/user/0/com.gosafe.gosafe/files/<file>` in the flag.
+
+`on_device_stt.dart`: the microphone is read on its own while pieces are decoded, a sentence still going at the end of a piece is carried into the next, and `SpeechFilter` is the hallucination filter of `stt/stt_service.py` ported to Dart (invented "like dan subscribe" outros, `[BLANK_AUDIO]`, loops like "hai hai hai"; a line with "tolong" is never dropped as a loop). The log shows `mic level`, `decoded Xs of audio in Y ms` and each line as KEPT or DROP. It does not mask phone numbers, plates or emails (the Python module does).
 
 ## Tests
 
-`flutter test` runs 30 tests with no backend needed.
+`flutter test` runs 57 tests with no backend needed (`test/wordpiece_test.dart` checks the tokenizer against Python's ids).
 
 | File | Covers |
 |---|---|
@@ -358,7 +384,7 @@ Then set the real thresholds in `SafetyEngine`.
 
 ## Testing with a real voice (laptop models)
 
-Until Whisper and the classifier run on the phone, the web app can use them on the laptop: `stt/dev_server.py` runs Akmal's speech-to-text pipeline (Silero voice detection, Whisper maleo small, the hallucination filter) and the team's DistilBERT classifier.
+The web preview can't run the models, so it can use them on the laptop: `stt/dev_server.py` runs Akmal's speech-to-text pipeline (Silero voice detection, Whisper, the hallucination filter) and the IndoBERT-lite classifier.
 
 1. The classifier comes with the repo: `stt/models/clf-lite-5x/` (IndoBERT-lite, 5 labels). Download the Whisper model into `stt/models/maleo-small-id-q8_0/` (git-ignored, see `stt/models/README.md`).
 2. From `stt/`: `uv run --no-project --python 3.12 --with numpy --with scipy --with soundfile --with pywhispercpp --with torch --with transformers --with safetensors --with silero-vad python dev_server.py --port 7088 --whisper models/maleo-small-id-q8_0/ggml-small-id-q8_0.bin --classifier models/clf-lite-5x` (add `--save-dir <folder outside the repo>` to keep every received piece for replay).
@@ -371,24 +397,7 @@ How it works (`lib/services/dev_ml.dart`):
 - **Keywords** allow Indonesian suffixes ("buka bajunya"). Swear words count only when aimed at someone (an addressee like lu, lo, kamu, dasar in the same line), and then only as uncomfortable: a warning, never high. Slurs count as sexual harassment.
 - **Labels:** the team model's 11 labels and the 5-label scheme (normal, uncomfortable, sexual, threat, victim) both map onto the app's 4; victim speech (refusal, distress) only warns on its own. See `stt/eval/README.md` for the classifier experiment.
 - The service prints KEPT or DROP for every segment. It keeps real speech before an invented YouTube outro ("like share dan subscribe") instead of dropping the whole segment.
-- Web only: on Android the ride recorder and this listener would compete for the mic.
-
-## Speech-to-text on the phone (experiment)
-
-The scripted conversation can be replaced by real speech-to-text that runs **inside the app**: whisper.cpp through the `whisper_ggml` package, with the same Indonesian model the benchmark picked (`maleo-ai/whisper-small-id`, ggml q8_0, see `stt/models/README.md`). It is off unless `WHISPER_MODEL` is set, so nothing changes by default. The words are judged by the app's own classifier (the keyword filter), not the team model.
-
-| Flag | What it does |
-|---|---|
-| `--dart-define=WHISPER_MODEL=<path>` | The ggml file **on the phone**. Turns the feature on. The model (264 MB) is not in the app or the repo |
-| `--dart-define=WHISPER_VAD=<path>` | Optional Silero ggml file (about 1 MB) so silence never reaches the decoder and sentences split at pauses. Not tried yet |
-| `--dart-define=WHISPER_TEST_WAV=<path>` | Hear a 16 kHz mono WAV instead of the microphone, to test without a mic |
-| `--dart-define=WHISPER_CHUNK_SECS=6` | Audio is decoded in pieces this long. Shorter shows words sooner and works the phone harder |
-
-On an emulator (debug build) the app can only read its own private folder, so copy the files in with `adb push` to `/data/local/tmp/`, then `adb shell run-as com.gosafe.gosafe cp ... files/` and use `/data/user/0/com.gosafe.gosafe/files/<file>` in the flags.
-
-`lib/services/on_device_stt.dart` holds it: the microphone is read on its own while pieces are decoded, a sentence still going at the end of a piece is carried into the next, and `SpeechFilter` is the hallucination filter of `stt/stt_service.py` ported to Dart (invented "like dan subscribe" outros, `[BLANK_AUDIO]`, loops like "hai hai hai"; a line with "tolong" is never dropped as a loop). The log shows `mic level`, `decoded Xs of audio in Y ms` and each line as KEPT or DROP.
-
-What this does **not** show: speed, memory and battery on a real phone were not measured. The only run was on an arm64 emulator on a Mac laptop, where a 6 s piece took 3 to 5 s to decode, with one 31 s spike on a looping piece. It also does not mask phone numbers, plates or emails (the Python module does), and the score Whisper gives for "no speech" is not available, so the filter is weaker than the Python one.
+- Web only: Android uses edge AI.
 
 ## Running it
 

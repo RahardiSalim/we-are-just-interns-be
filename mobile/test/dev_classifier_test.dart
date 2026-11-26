@@ -1,9 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gosafe/engine/classifier.dart';
 import 'package:gosafe/services/dev_ml.dart';
+import 'package:gosafe/services/edge_ai.dart';
 
-DevClassifier withModel(Map<String, (String, double)> answers) =>
-    DevClassifier(Uri.parse('http://x'))..raw.addAll(answers);
+ModelClassifier withModel(Map<String, (String, double)> answers) =>
+    ModelClassifier((_) async => ('normal', 0.5))..raw.addAll(answers);
 
 void main() {
   test(
@@ -78,4 +79,10 @@ void main() {
       );
     },
   );
+
+  test('the phone model\'s logits become the top label and its probability', () {
+    final (label, p) = EdgeAi.best([0.0, 2.0, 0.0], ['normal', 'threat', 'victim']);
+    expect(label, 'threat');
+    expect(p, closeTo(0.787, 0.001)); // e^2 / (1 + e^2 + 1)
+  });
 }

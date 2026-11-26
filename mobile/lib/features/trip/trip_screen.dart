@@ -613,11 +613,8 @@ class _TripScreenState extends State<TripScreen> {
                 color: Colors.white,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.verified_user_rounded,
-                color: GoSafeColors.brand,
-                size: 20,
-              ),
+              padding: const EdgeInsets.all(4),
+              child: Image.asset('assets/brand/gosafe.png'),
             ),
             const Text('GoSafe'),
           ],

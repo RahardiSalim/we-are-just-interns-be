@@ -6,12 +6,11 @@ import 'package:record/record.dart';
 
 import '../engine/classifier.dart';
 
-/// Real speech-to-text and classifier for testing, until the models run on the phone.
+/// The text classifier's rules, and the laptop shortcut for testing with a real voice.
 ///
-/// shortcut: the models run on the laptop (`stt/dev_server.py`, Whisper maleo + the team's
-/// DistilBERT) and the app sends them audio over the network. Turned on with
-/// `--dart-define=DEV_ML=http://localhost:7070`. The architecture puts both on the phone; this
-/// exists so the whole flow can be tried with a real voice before they're ported.
+/// [ModelClassifier] combines the keywords with the IndoBERT-lite model, wherever the model runs: on the
+/// phone (`lib/services/edge_ai.dart`, the default on Android) or on the laptop (`stt/dev_server.py`,
+/// turned on with `--dart-define=DEV_ML=http://localhost:7088`, used by the web preview).
 
 /// The team classifier's labels (the original 11, or the 5-label scheme) mapped onto the app's 4.
 // shortcut: our mapping, not the model author's; the team should confirm it.
@@ -43,16 +42,31 @@ const devLabelMap = {
 ///   only when 2+ lines in the window agree (persistence), so one misread line can't escalate.
 /// - Where both say the same harmful label, the higher score counts, which can make it high.
 /// A window takes the most severe line, scored by that label's best line.
-class DevClassifier implements Classifier {
-  DevClassifier(this.server);
-  final Uri server;
+class ModelClassifier implements Classifier {
+  /// [score] gives the model's label and score for one line.
+  ModelClassifier(this.score);
+
+  /// The model on the laptop's `stt/dev_server.py`.
+  ModelClassifier.server(Uri server) : this((line) => _ask(server, line));
+
+  final Future<(String, double)> Function(String line) score;
   static const modelAloneAt = 0.9;
+  static const _victim = {'victim', 'REFUSAL', 'DISTRESS'}; // the person being harmed, in both schemes
   final _keywords = KeywordClassifier();
 
-  /// Each line's raw model answer, e.g. ("PERSONAL_PROBING", 0.68). Shown under the line on screen.
+  /// Each line's raw model answer, e.g. ("threat", 0.97). Shown under the line on screen.
   final raw = <String, (String, double)>{};
 
+  /// Scores a line before the engine hears it, so [classify] (synchronous) already knows it.
   Future<void> learn(String line) async {
+    raw[line] = await score(line);
+    // Only the recent lines are ever judged (the engine's 15 s window); don't keep a whole day of talk.
+    while (raw.length > 200) {
+      raw.remove(raw.keys.first);
+    }
+  }
+
+  static Future<(String, double)> _ask(Uri server, String line) async {
     final res = await http.post(
       server.resolve('/classify'),
       headers: {'Content-Type': 'application/json'},
@@ -61,7 +75,7 @@ class DevClassifier implements Classifier {
       }),
     );
     final r = (jsonDecode(res.body)['results'] as List).single as Map;
-    raw[line] = (r['label'] as String, (r['score'] as num).toDouble());
+    return (r['label'] as String, (r['score'] as num).toDouble());
   }
 
   /// The line's label and score, plus what the model saw when it decided alone (for the persistence rule).
@@ -75,7 +89,7 @@ class DevClassifier implements Classifier {
     }
     // Victim speech alone ("halo bagaimana situasi saat ini" read as victim 0.99) is no offence: it only adds
     // weight when a keyword already flagged the window, so the model alone never warns on it.
-    if (m != Label.normal && r!.$1 != 'victim' && p >= modelAloneAt) {
+    if (m != Label.normal && !_victim.contains(r!.$1) && p >= modelAloneAt) {
       return (Label.uncomfortable, p, m);
     }
     return (Label.normal, 0.5, null);
@@ -119,12 +133,12 @@ class DevClassifier implements Classifier {
 
 /// Finished utterances from the real microphone, transcribed by the laptop's Whisper.
 /// Audio is sent every [chunkSecs] seconds as WAV, carrying an unfinished sentence into the next piece; each line is classified
-/// before it's handed on, so [DevClassifier] already knows it when the engine asks.
+/// before it's handed on, so [ModelClassifier] already knows it when the engine asks.
 // shortcut: a second recorder on the same mic. Fine in a browser; on Android the ride recorder and
 // this one would compete for the mic, so use it on the web preview.
 Stream<String> devListener(
   Uri server,
-  DevClassifier classifier, {
+  ModelClassifier classifier, {
   int chunkSecs = 15,
   double maxCarrySecs = 10, // a very long sentence is taken anyway, so the buffer can't grow forever
 }) async* {
