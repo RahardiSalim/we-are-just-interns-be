@@ -22,6 +22,8 @@ No Firebase project is needed: the emulators use the offline project `demo-gosaf
 
 Once: install Java 21 (`brew install openjdk@21`, then put `/opt/homebrew/opt/openjdk@21/bin` on your `PATH`), the Firebase CLI (`npm install -g firebase-tools`), and `uv`.
 
+**One command for a demo:** `scripts/demo.sh` runs steps 1–4 below, reachable from a phone on the same Wi-Fi (or with the laptop on the phone's hotspot), and prints the `flutter run` line with the laptop's IP. Ctrl+C stops everything.
+
 | Step | Where | Command |
 |---|---|---|
 | 1. Emulators (UI at http://127.0.0.1:4000) | `firebase/` | `firebase emulators:start` |

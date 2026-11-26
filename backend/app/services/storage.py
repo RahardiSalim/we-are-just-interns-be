@@ -1,5 +1,7 @@
+import hashlib
+import hmac
 import os
-from datetime import timedelta
+from datetime import datetime, timedelta, timezone
 from urllib.parse import quote
 
 import google.auth
@@ -13,11 +15,14 @@ from app.core.firebase import init
 
 def upload_method() -> str:
     """Real signed URLs take PUT; the Storage emulator's upload API only takes POST."""
-    return "POST" if config.EMULATOR else "PUT"
+    return "POST" if config.EMULATOR and not config.R2_BUCKET else "PUT"
 
 
 def upload_bytes(path: str, data: bytes, content_type: str) -> None:
     """Server-side upload (seed data). Phones upload through signed URLs instead."""
+    if config.R2_BUCKET:
+        httpx.put(signed_url(path, "PUT"), content=data, headers={"Content-Type": content_type}).raise_for_status()
+        return
     if config.EMULATOR:
         host = os.getenv("FIREBASE_STORAGE_EMULATOR_HOST", "127.0.0.1:9199")
         url = f"http://{host}/upload/storage/v1/b/{config.FIREBASE_STORAGE_BUCKET}/o?uploadType=media&name={quote(path, safe='')}"
@@ -32,6 +37,9 @@ def signed_url(path: str, method: str, content_type: str = "audio/wav") -> str:
     Needs the Cloud Run service account with "Service Account Token Creator" on itself;
     signing goes through IAM, so no key file is involved.
     """
+    if config.R2_BUCKET:
+        host = f"{config.R2_ACCOUNT_ID}.r2.cloudflarestorage.com"
+        return presign(method, host, f"/{config.R2_BUCKET}/{path}", config.R2_ACCESS_KEY_ID, config.R2_SECRET_ACCESS_KEY)
     if config.EMULATOR:
         # The Storage emulator's GCS API takes unsigned requests, so local runs need no Google credentials.
         host = os.getenv("FIREBASE_STORAGE_EMULATOR_HOST", "127.0.0.1:9199")
@@ -50,3 +58,25 @@ def signed_url(path: str, method: str, content_type: str = "audio/wav") -> str:
         service_account_email=creds.service_account_email,
         access_token=creds.token,
     )
+
+
+def presign(method: str, host: str, path: str, key_id: str, secret: str,
+            region: str = "auto", expires: int = 600, now: datetime | None = None) -> str:
+    """S3 SigV4 query-string signature (R2 speaks S3). Signs only the host, so any Content-Type is accepted."""
+    stamp = (now or datetime.now(timezone.utc)).strftime("%Y%m%dT%H%M%SZ")
+    scope = f"{stamp[:8]}/{region}/s3/aws4_request"
+    params = {
+        "X-Amz-Algorithm": "AWS4-HMAC-SHA256",
+        "X-Amz-Credential": f"{key_id}/{scope}",
+        "X-Amz-Date": stamp,
+        "X-Amz-Expires": str(expires),
+        "X-Amz-SignedHeaders": "host",
+    }
+    query = "&".join(f"{k}={quote(v, safe='')}" for k, v in sorted(params.items()))
+    canonical = f"{method}\n{quote(path)}\n{query}\nhost:{host}\n\nhost\nUNSIGNED-PAYLOAD"
+    to_sign = f"AWS4-HMAC-SHA256\n{stamp}\n{scope}\n{hashlib.sha256(canonical.encode()).hexdigest()}"
+    key = ("AWS4" + secret).encode()
+    for part in (stamp[:8], region, "s3", "aws4_request"):
+        key = hmac.new(key, part.encode(), hashlib.sha256).digest()
+    signature = hmac.new(key, to_sign.encode(), hashlib.sha256).hexdigest()
+    return f"https://{host}{quote(path)}?{query}&X-Amz-Signature={signature}"
