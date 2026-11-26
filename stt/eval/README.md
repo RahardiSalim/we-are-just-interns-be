@@ -41,6 +41,9 @@ Results on 2026-11-27 (your voice = 8 scenario recordings by one speaker, quiet 
 | Team DistilBERT (11 labels) | 59% (5-label view) | 14/16 | 3/42 |
 | IndoBERT-lite, synthetic only | 66% | | |
 | IndoBERT-lite + extra data, swearing counts only when aimed at someone | 89% | **15/16** | **1/42** |
+| **IndoBERT-lite on both synthetic batches + extra data (5xx, shipped in `stt/models/clf-lite-5x`)** | 89% | **15/16** | 2/42 |
+
+On held-out rounds of the second synthetic batch (unseen by both), 5xx scores 96% against 86% for the previous version, with threats up from F1 0.78 to 0.96; its extra false alarm on the voice test started with speech-to-text hearing "kalau" as "kau". `train_classifier.py --data <file> --data <file>` takes several batches and holds out a sixth of each file's rounds.
 
 The hand-written lines and the extra data have the same author, so the 89% is optimistic; the voice results are the fairer test. Both remaining voice errors are not the classifier's: speech-to-text heard "gue bawa pisau" as "ke bawah pisau", and the keyword "buka baju" fired on a child's clothes.
 

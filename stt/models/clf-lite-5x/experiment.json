@@ -1,6 +1,10 @@
 {
  "base": "indobenchmark/indobert-lite-base-p1",
  "scheme": "5",
+ "data": [
+  "synth_single_sentence_all (1).csv",
+  "synth_single_sentence_all (2).csv"
+ ],
  "extra": [
   "data/classifier_extra.csv"
  ],
@@ -11,19 +15,29 @@
   "uncomfortable",
   "victim"
  ],
- "train": 3790,
- "test": 821,
+ "train": 4799,
+ "test": 1089,
  "test_rounds": [
-  "1",
-  "19",
-  "20",
-  "24",
-  "27",
-  "37",
-  "46",
-  "50",
-  "55",
-  "58"
+  "0:1",
+  "0:19",
+  "0:20",
+  "0:24",
+  "0:27",
+  "0:37",
+  "0:46",
+  "0:50",
+  "0:55",
+  "0:58",
+  "1:1",
+  "1:12",
+  "1:15",
+  "1:17",
+  "1:20",
+  "1:21",
+  "1:28",
+  "1:40",
+  "1:47",
+  "1:56"
  ],
  "epochs": 6,
  "seed": 7

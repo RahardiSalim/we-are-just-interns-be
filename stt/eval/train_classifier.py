@@ -30,6 +30,7 @@ FIVE = {
     "APPEARANCE_SEXUAL": "sexual", "SEXUAL_EXPLICIT": "sexual",
     "INTIMIDATION": "threat", "ROUTE_COERCION": "threat",
     "REFUSAL": "victim", "DISTRESS": "victim",
+    "BENIGN": "normal",  # the second synthetic batch's harmless label
 }
 # ride_script.csv 'kind' -> truth in each scheme (None: not comparable in that scheme).
 SCRIPT_11 = {"logistics": "LOGISTICS", "smalltalk": "LOGISTICS", "service_conflict": "SERVICE_CONFLICT",
@@ -81,7 +82,7 @@ def report(name, labels, pred_probs, truth):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--data", required=True)
+    ap.add_argument("--data", required=True, action="append", help="synthetic CSV; repeat for several batches")
     ap.add_argument("--scheme", choices=["11", "5"], default="5")
     ap.add_argument("--base", default="indobenchmark/indobert-lite-base-p1")
     ap.add_argument("--baseline", help="score this existing model folder (11 labels) instead of training")
@@ -96,12 +97,17 @@ def main():
 
     random.seed(args.seed)
     torch.manual_seed(args.seed)
-    rows = [r for r in csv.DictReader(open(args.data)) if r["verified_label"] in FIVE]
+    rows = []
+    for i, path in enumerate(args.data):  # rounds are per file: keep them apart
+        rows += [{**r, "round": f"{i}:{r['round']}", "src": i} for r in csv.DictReader(open(path))
+                 if r["verified_label"] in FIVE]
     label_of = (lambda r: r["verified_label"]) if args.scheme == "11" else (
         lambda r: r.get("label5") or FIVE[r["verified_label"]])
-    rounds = sorted({r["round"] for r in rows})
-    random.shuffle(rounds)
-    test_rounds = set(rounds[: max(1, len(rounds) // 6)])  # whole generation batches held out
+    test_rounds = set()
+    for i in range(len(args.data)):  # hold out a sixth of each file's generation rounds, as whole batches
+        rounds = sorted({r["round"] for r in rows if r["src"] == i})
+        random.shuffle(rounds)
+        test_rounds |= set(rounds[: max(1, len(rounds) // 6)])
     train = [r for r in rows if r["round"] not in test_rounds]
     test = [r for r in rows if r["round"] in test_rounds]
     labels = sorted({label_of(r) for r in rows})
@@ -167,6 +173,10 @@ def main():
         print(f"epoch {epoch + 1}: loss {total / (len(data) / 32):.3f}", flush=True)
 
     report("held-out synthetic", labels, predict(model, tok, [r["text"] for r in test]), [label_of(r) for r in test])
+    for i in range(1, len(args.data)):
+        part = [r for r in test if r["src"] == i]
+        report(f"held-out synthetic, file {i + 1} only", labels, predict(model, tok, [r["text"] for r in part]),
+               [label_of(r) for r in part])
     res = report("hand-written ride script", labels, predict(model, tok, [t for t, _, _ in script]),
                  [l for _, l, _ in script])
     for (t, truth, kind), p in zip(script, res["pred"]):
@@ -176,7 +186,7 @@ def main():
     model.save_pretrained(args.out)
     tok.save_pretrained(args.out)
     (Path(args.out) / "experiment.json").write_text(json.dumps(
-        {"base": args.base, "scheme": args.scheme, "extra": args.extra, "labels": labels, "train": len(train), "test": len(test),
+        {"base": args.base, "scheme": args.scheme, "data": [Path(d).name for d in args.data], "extra": args.extra, "labels": labels, "train": len(train), "test": len(test),
          "test_rounds": sorted(test_rounds), "epochs": args.epochs, "seed": args.seed}, indent=1))
     print(f"saved to {args.out}")
 

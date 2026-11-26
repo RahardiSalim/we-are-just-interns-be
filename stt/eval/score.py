@@ -94,10 +94,14 @@ def transcribe(args) -> None:
     from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
     from dev_server import clean
-    from stt_service import SileroVAD, WhisperCppBackend, process_window
+    import time
+
+    from stt_service import HFBackend, SileroVAD, WhisperCppBackend, process_window
 
     scenarios = sorted({r["scenario"] for r in csv.DictReader(open(HERE / "ride_script.csv"))})
-    stt, vad = WhisperCppBackend(args.whisper), SileroVAD()
+    # A .bin file is a whisper.cpp (ggml) model; a folder is a Hugging Face model run with transformers.
+    stt = WhisperCppBackend(args.whisper) if args.whisper.endswith(".bin") else HFBackend(args.whisper)
+    vad = SileroVAD()
     tok = AutoTokenizer.from_pretrained(args.classifier)
     clf = AutoModelForSequenceClassification.from_pretrained(args.classifier).eval()
     out = []
@@ -107,7 +111,9 @@ def transcribe(args) -> None:
             print(f"skip {path.name}: name doesn't start with a scenario from ride_script.csv")
             continue
         audio = load_16k(path)
+        t0 = time.perf_counter()
         win = process_window(audio, stt, vad)
+        secs = time.perf_counter() - t0
         dropped = []
         lines = clean(win["segments"], log=lambda seg, kept, _t: None if kept else dropped.append(seg["text_raw"]))
         if lines:
@@ -117,7 +123,7 @@ def transcribe(args) -> None:
             for line, p in zip(lines, probs):
                 line["model"] = [clf.config.id2label[int(p.argmax())], round(float(p.max()), 3)]
         out.append({"file": path.name, "scenario": scenario, "durationSec": round(len(audio) / 16000, 1),
-                    "lines": lines, "dropped": dropped})
+                    "sttSec": round(secs, 2), "stt": stt.name, "lines": lines, "dropped": dropped})
         print(f"{path.name}: {len(lines)} lines, {len(dropped)} dropped", flush=True)
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(out, ensure_ascii=False, indent=1))
@@ -175,6 +181,11 @@ def report(args) -> None:
             # The action may sit on any line of the run: take the strongest.
             best = max(near, key=lambda i: RANK_ALL[acts[i]["action"]], default=None)
             got = acts[best]["action"] if best is not None else "none"
+            # Anything fired on any heard line up to here counts as already raised, even on a line no script line
+            # matched (the cooldown then keeps later lines quiet, as it should).
+            upto = near[-1] if near else floor
+            fired_so_far = max([fired_so_far] + [3 if a["action"] == "sos" else RANK[a["action"]]
+                                                 for a in acts[: upto]])
             tot["lines"] += 1
             tot["heard"] += cov >= 0.6
             want = r["expect"]
@@ -204,6 +215,9 @@ def report(args) -> None:
         + (f"; {tot['false'] / hours:.0f} per hour of harmless talk" if hours else ""),
         f"- **Lines heard by speech-to-text (≥60% of words):** {tot['heard']}/{tot['lines']}",
         f"- **Invented lines on no-speech audio:** {tot['halluc']} in {tot['nospeech_sec']:.0f} s",
+        f"- **Speed:** {sum(f.get('sttSec', 0) for f in asr.values()):.0f} s to transcribe "
+        f"{sum(f['durationSec'] for f in asr.values()):.0f} s of audio on this machine "
+        f"(speech-to-text: {next(iter(asr.values())).get('stt', '?')})",
         "",
     ]
     if rows_out:
