@@ -15,6 +15,7 @@ import 'engine/safety_engine.dart';
 import 'services/api.dart';
 import 'services/dev_ml.dart';
 import 'services/mock_listener.dart';
+import 'services/on_device_stt.dart';
 import 'services/file_ride_store.dart';
 import 'services/recorder.dart';
 import 'services/ride.dart';
@@ -36,6 +37,13 @@ const _firebaseOptions = FirebaseOptions(
 const _emulatorHost = String.fromEnvironment('EMULATOR_HOST');
 const _devMlUrl = String.fromEnvironment('DEV_ML');
 final _devMl = _devMlUrl.isEmpty ? null : DevClassifier(Uri.parse(_devMlUrl));
+// Experiment: speech-to-text on the phone itself (services/on_device_stt.dart). WHISPER_MODEL is the
+// ggml file on the phone, WHISPER_VAD the Silero ggml file, WHISPER_TEST_WAV a 16 kHz mono WAV to
+// hear instead of the microphone.
+const _whisperModel = String.fromEnvironment('WHISPER_MODEL');
+const _whisperVad = String.fromEnvironment('WHISPER_VAD');
+const _whisperTestWav = String.fromEnvironment('WHISPER_TEST_WAV');
+const _whisperChunkSecs = int.fromEnvironment('WHISPER_CHUNK_SECS', defaultValue: 6);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -91,7 +99,14 @@ class GoSafeApp extends StatelessWidget {
         recorder: MicRecorder(store),
         store: store,
         // DEV_ML: the real mic through the laptop's Whisper and classifier (stt/dev_server.py).
-        listen: dev == null
+        listen: dev == null && _whisperModel.isNotEmpty
+            ? () => onDeviceListener(
+                modelPath: _whisperModel,
+                vadModelPath: _whisperVad.isEmpty ? null : _whisperVad,
+                pcm: _whisperTestWav.isEmpty ? null : pcmFromWav(_whisperTestWav),
+                chunkSecs: _whisperChunkSecs,
+              )
+            : dev == null
             ? () => scriptedListener(
                 lines:
                     const String.fromEnvironment('DEMO_SCRIPT') == 'safe_phrase'
