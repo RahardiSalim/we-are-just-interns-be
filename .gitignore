@@ -1,0 +1,28 @@
+# secrets
+.env
+.env.*
+!.env.example
+*service-account*.json
+google-services.json
+GoogleService-Info.plist
+
+# python
+__pycache__/
+.venv/
+.pytest_cache/
+
+# node
+node_modules/
+.next/
+.vercel/
+
+# flutter
+.dart_tool/
+build/
+*.iml
+
+# firebase
+.firebase/
+*-debug.log
+
+.DS_Store
