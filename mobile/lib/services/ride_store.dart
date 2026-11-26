@@ -100,7 +100,7 @@ abstract interface class RideStore {
   Future<List<RideMeta>> rides();
   Future<void> delete(String tripId);
 
-  /// The user's own safe phrase (the hands-free SOS), kept encrypted with the rides. Null until set.
+  /// The user's own safe phrase (the hands-free alarm), kept encrypted with the rides. Null until set.
   Future<String?> safePhrase();
   Future<void> setSafePhrase(String phrase);
 }

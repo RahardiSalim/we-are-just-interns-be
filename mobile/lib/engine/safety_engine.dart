@@ -102,6 +102,27 @@ class SafetyEngine {
     );
   }
 
+  /// The safe phrase was heard in the line [heard] judged: the person is telling us they're in danger,
+  /// so that line is a high flag whatever the classifier said (`threat`, score 1.0). It counts on the
+  /// ladder like any high flag: a later one is the 2nd, the one after that the 3rd.
+  Decision safePhrase(Decision heard) {
+    if (heard.action == SafetyAction.high) return heard; // already counted
+    if (heard.action == SafetyAction.warn) _warnings--; // the same line: count it once, as high
+    _highs++;
+    final w = heard.window;
+    return Decision(
+      SafetyAction.high,
+      Verdict(Label.threat, 1.0, [
+        for (final (i, f) in heard.verdict.flagged.indexed) i == w.length - 1 || f,
+      ]),
+      [
+        for (final (i, l) in w.indexed)
+          Line(l.start, l.end, l.text, flagged: i == w.length - 1 || l.flagged),
+      ],
+      nth: _highs,
+    );
+  }
+
   SafetyAction _decide(Verdict v) {
     // Only a new offending line counts: the same remark staying in the 15 s window isn't a repeat.
     if (v.flagged.isEmpty || !v.flagged.last) return SafetyAction.none;

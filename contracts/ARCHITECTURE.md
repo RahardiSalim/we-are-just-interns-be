@@ -44,9 +44,9 @@ Agreed 2026-11-26. **The mobile app is the core:** everything from speech-to-tex
 | Level | When | What happens |
 |---|---|---|
 | Warning | A new line with `score` ≥ warning threshold | A kind, neutral message on the phone with "I'm fine" and "Report"; nothing is sent, the moment is marked on the phone. The **2nd** warning on a ride is firmer and the recording uploads at the end (the backend accepts a ride with 2+ warnings); the **3rd** counts as a high flag. See mobile/README.md "The ladder". |
-| High | `score` ≥ high threshold for `threat` / `sexual_harassment` | The flag goes to the backend **immediately** (`trigger: auto`), escalated for an agent. The phone asks "Are you okay?", **quietly first**: vibration only, every 10 s. No answer at **60 s**: the phone goes **Live**. No answer at **120 s**: the loud alarm, and "shout TOLONG", which then counts as "I need help". The **2nd** high flag on a ride joins the same case and goes **Live** ("Are you still okay?"); the **3rd** sends an SOS. |
+| High | `score` ≥ high threshold for `threat` / `sexual_harassment` | The flag goes to the backend **immediately** (`trigger: auto`), escalated for an agent. The phone asks "Are you okay?", **quietly first**: vibration only, every 10 s. No answer at **60 s**: the phone goes **Live**. No answer at **120 s**: the loud alarm, and "shout TOLONG", which then counts as "I need help". The **2nd** high flag on a ride joins the same case and goes **Live** ("Are you still okay?"); the **3rd** sends an SOS. The **safe phrase** is a high flag too (label `threat`): sent at once and **Live** at once, silently (no question, no alarm). |
 | Report driver / Report passenger | A person presses it, any time, or "Report" on a warning | Sent immediately (`trigger: manual_unsafe`), then "Do you need help right now?": "Yes, get help" is an SOS. |
-| SOS | The SOS button, "I need help", the safe phrase, or a shout for help | Sent immediately and the phone goes **Live**. The buttons are always on screen and never wait for the model. |
+| SOS | The SOS button, "I need help", a shout for help, or the 3rd high flag | Sent immediately and the phone goes **Live**. The buttons are always on screen and never wait for the model. |
 
 **What leaves the phone.** Each ride has a share level that only goes up (`Share` in `mobile/lib/services/ride_store.dart`):
 
@@ -220,7 +220,7 @@ The review advises the agent and never decides. The dashboard shows it next to t
 
 ## Decisions (where the two source docs disagreed)
 
-- **Severity rules for button reports** (`backend/app/services/pipeline.py`): Trigger `sos` (button, "I need help" or the safe phrase) → always high (escalate): a check-in would also ask the driver and give away a silent SOS. `threat` or `sexual_harassment` → high. Everything else → medium (check-in). If processing fails, an `sos` or `auto` case is still set to `escalated` (with `error`) so it reaches the agent queue. A person pressed the button, so the backend never dismisses these. Automatic reports only arrive at "high", so `dismissed` stays unused for now.
+- **Severity rules for button reports** (`backend/app/services/pipeline.py`): Trigger `sos` (button, "I need help", a shout, the 3rd high flag) or `auto` (a high flag, the safe phrase) → always high (escalate): a check-in would also ask the driver and give away a silent safe phrase. `threat` or `sexual_harassment` → high. Everything else → medium (check-in). If processing fails, an `sos` or `auto` case is still set to `escalated` (with `error`) so it reaches the agent queue. A person pressed the button, so the backend never dismisses these. Automatic reports only arrive at "high", so `dismissed` stays unused for now.
 - **Classifier until IndoBERT lands:** an Indonesian keyword filter (`app/services/classify.py`). A `deviceLabel` from the phone always wins; the filter still marks `flagged` lines.
 - **Summary until Sahabat-AI is hosted:** a template from the masked flagged lines (phone numbers masked; names not yet).
 - **Retention:** 7 days by default, 30 days while a case is escalated, back to 7 days once closed.

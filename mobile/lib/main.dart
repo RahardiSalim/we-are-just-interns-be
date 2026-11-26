@@ -178,6 +178,7 @@ class GoSafeApp extends StatelessWidget {
                 loud: loud,
               ),
         clearAlert: kIsWeb ? null : Ride.clearAlert,
+        vibrate: kIsWeb ? null : Ride.vibrate,
         dial: kIsWeb ? null : Ride.dial,
       ),
     );

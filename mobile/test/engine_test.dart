@@ -54,6 +54,26 @@ void main() {
       expect((third.action, third.nth), (SafetyAction.high, 1));
     });
 
+    test('the safe phrase makes its line a high flag that counts on the ladder', () {
+      hear('Mbak tinggal sendiri ya?');
+      final heard = hear('Pak, nanti lewat jalan biasa aja ya.');
+      expect(heard.action, SafetyAction.none, reason: 'the words themselves are harmless');
+      final d = engine.safePhrase(heard);
+      expect((d.action, d.nth), (SafetyAction.high, 1));
+      expect((d.verdict.label, d.verdict.score), (Label.threat, 1.0));
+      expect([for (final l in d.window) l.flagged], [true, true]);
+      final next = hear('Cantik banget, nanti mampir ke tempat saya.');
+      expect((next.action, next.nth), (SafetyAction.high, 2));
+    });
+
+    test('the safe phrase in a line already flagged counts once', () {
+      final warned = hear('Mbak udah punya pacar belum? Pak, nanti lewat jalan biasa aja ya.');
+      expect(warned.action, SafetyAction.warn);
+      expect(engine.safePhrase(warned).nth, 1);
+      final second = hear('Tinggal sendiri ya?');
+      expect((second.action, second.nth), (SafetyAction.warn, 1), reason: 'the first warning became the high flag');
+    });
+
     test('harassment goes high, with the window as evidence, and counts each repeat', () {
       hear('Mbak tinggal sendiri ya?');
       final d = hear('Cantik banget, nanti mampir ke tempat saya.');

@@ -5,6 +5,9 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.VibrationEffect
+import android.os.Vibrator
+import android.os.VibratorManager
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -39,6 +42,10 @@ class MainActivity : FlutterActivity() {
                     Alerts.clear(this)
                     result.success(null)
                 }
+                "vibrate" -> {
+                    vibrate()
+                    result.success(null)
+                }
                 "dial" -> {
                     // ACTION_DIAL fills in the number; the user presses call. Needs no permission.
                     startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + call.argument<String>("number"))))
@@ -55,6 +62,17 @@ class MainActivity : FlutterActivity() {
                 else -> result.notImplemented()
             }
         }
+    }
+
+    // Two short pulses, no sound: a warning, a silent high flag (the safe phrase) or an SOS.
+    private fun vibrate() {
+        val vibrator = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            (getSystemService(VIBRATOR_MANAGER_SERVICE) as VibratorManager).defaultVibrator
+        } else {
+            @Suppress("DEPRECATION")
+            getSystemService(VIBRATOR_SERVICE) as Vibrator
+        }
+        vibrator.vibrate(VibrationEffect.createWaveform(longArrayOf(0, 200, 120, 200), -1))
     }
 
     // Android 13+ asks before an app may show notifications. Without it the alarm can't reach a locked phone.

@@ -68,7 +68,8 @@ Each ride has a **share level** that only goes up: **local → at end → live**
 | High flag | no answer | Live at 60 s | See the timeline below |
 | High flag, 2nd on the ride | "Are you still okay?" | Live | The flag joins the same case at once, and the ride goes Live |
 | High flag, 3rd on the ride | (no question) | Live | An SOS on the person's behalf, and Live |
-| Any time | SOS button, the safe phrase, or a shout for help | Live | An SOS, and Live |
+| Any time | SOS button, or a shout for help | Live | An SOS, and Live |
+| Any time | The safe phrase | Live | A high flag (`auto`) at once, **silently** (no question, no alarm), and Live at once. It counts on the high ladder: as the 3rd high flag it is an SOS |
 
 **Live** means: at once, every audio piece so far, the transcript and the flags; then a new 10-second piece and the new lines every 10 seconds until the ride ends. The case is marked **LIVE** at the top of the agents' queue, and the agent can listen while the ride goes on.
 
@@ -113,12 +114,12 @@ Why pieces: if the app is killed, the phone restarts or the battery dies, the ri
 | Alarm, phone call, music, or a Bluetooth headset disconnecting during the ride | Recording continues (`audioInterruption: none`, `audioRouteChange: follow`) |
 | App reinstalled | The Keystore key is gone, so old rides can't be opened; they're deleted |
 
-## Hands-free SOS: the safe phrase
+## Hands-free alarm: the safe phrase
 
-On a motorbike, tapping SOS is the hard part. The rider or the driver can say a natural-sounding sentence instead, by default **"Pak, nanti lewat jalan biasa aja ya"**. When speech-to-text hears it, the phone sends an SOS **silently**: no dialog and no alarm the driver could notice. The backend always escalates an SOS straight to an agent, and never sends a check-in that would reach the driver.
+On a motorbike, tapping SOS is the hard part. The rider or the driver can say a natural-sounding sentence instead, by default **"Pak, nanti lewat jalan biasa aja ya"**. When speech-to-text hears it, that line becomes a **high flag** whatever the classifier said (label `threat`, score 1.0; `SafetyEngine.safePhrase`). The phone sends it at once (`trigger: auto`) and goes **Live** at once, **silently**: no "Are you okay?", no alarm the driver could notice, only one short vibration. It counts on the high ladder like any high flag, so after two high flags it is the 3rd and sends an SOS (still silent). The backend escalates an `auto` flag straight to an agent and never sends a check-in that would reach the driver.
 
 - **No model needed.** It matches the speech-to-text output (`lib/engine/safe_phrase.dart`): words are lower-cased and stripped of punctuation, then compared word by word, allowing one slip per six words (a word missed, or a word one letter off, like "aja" → "saja" or "ya" → "yah"). The phrase can sit inside a longer sentence.
-- **Once per ride.** Saying it again doesn't send a second SOS.
+- **Once per ride.** Saying it again doesn't send a second flag.
 - **Setting it:** each person sets their own, rider and driver alike: **Safe phrase → Set / Change** on the home screen. It's kept on the phone, encrypted like the rides (`safe_phrase.enc`), never sent anywhere. 4 to 12 words; shorter phrases are refused because they'd fire by accident. Until one is set, the default is `--dart-define=SAFE_PHRASE=...` ("Pak, nanti lewat jalan biasa aja ya").
 - **Demo:** `flutter run --dart-define=DEMO_SCRIPT=safe_phrase` plays a short ride where the rider says the phrase.
 - **Limits:** it only works as well as speech-to-text hears the rider on a moving motorbike, which needs testing with the real model. Pick a phrase that's rare in normal rides, so it never fires by accident.
@@ -255,6 +256,8 @@ Every message is short and caring, never alarming. All the wording lives in one 
 | Screen locked, high flag | Notification **Are you okay?** "Something didn't sound right. Tap to tell us you're okay." Vibration only for 2 minutes, then the alarm sound | Tap opens the app |
 | During the ride | Ongoing notification "GoSafe is keeping this ride safe" | |
 
+**Vibration.** Only the phone where it happened vibrates, once (two short pulses, no sound, no notification): a warning, the safe phrase and an SOS. A high flag's "Are you okay?" buzzes every 10 s instead (above). A report doesn't vibrate. The other person's phone never does.
+
 The questions (consent, a warning, "Are you okay?", "We've reported…", and "Help is on the way" after an SOS sent on the person's behalf) are **Gojek bottom sheets** (`showGoSheet`): they rise from the bottom edge, the page behind fades, and each carries its own way to get help, so the SOS button is never needed behind them. One at a time: a newer one replaces an open one, but a warning never replaces "Are you okay?". Status messages ("We're on it", "Ride ended…", Live, no signal) stay in a card at the **top** of the sheet. The app opens straight on the ride and asks for recording consent at once. The ride screen is a sheet over a drawn map, as in the Gojek app: drag it down to see the map, up to read everything. SOS sits beside the listening signal in the first screenful; Report and "End ride" are further down the sheet.
 
 ## What the phone sends, and when
@@ -263,8 +266,8 @@ The questions (consent, a warning, "Are you okay?", "We've reported…", and "He
 
 | `trigger` | Sent when | What the backend does |
 |---|---|---|
-| `auto` | The engine reached "high" | Escalates straight away: the highest priority for customer service |
-| `sos` | SOS button, "I need help", or the safe phrase heard | Always escalates at once, never a check-in (a check-in would also ask the driver, which would give away a silent SOS). If processing fails, it's still escalated so an agent sees it |
+| `auto` | The engine reached "high", or the safe phrase was heard (`threat`, 1.0) | Escalates straight away: the highest priority for customer service. Never a check-in, which would also ask the driver |
+| `sos` | SOS button, "I need help", a shout for help, or the 3rd high flag | Always escalates at once, never a check-in (a check-in would also ask the driver). If processing fails, it's still escalated so an agent sees it |
 | `manual_unsafe` | Report driver / passenger, or Report on a warning | Goes to an agent as medium priority (high if the label is harmful). Nobody else is asked anything |
 
 Each one is `POST /incidents`, then `POST /incidents/{id}/finalize`, with the phone's evidence. If the ride already has an open case, the report joins it (`merged: true`) and there's nothing to finalize:
@@ -378,8 +381,8 @@ On an emulator (debug build) the app can only read its own private folder, so co
 
 | File | Covers |
 |---|---|
-| `test/engine_test.dart` | Classifier labels, flags and scores. Engine: ordinary talk, warning and cooldown, high once per ride, the 15-second window, a threat below the high threshold |
-| `test/trip_screen_test.dart` | Consent yes starts recording and listening; "Not now" records nothing and SOS works; no recording without Safe Ride or the mic; a warning ignored stays on the phone; a report sends at end, and "Yes, get help" goes Live; a high flag answered okay sends at end, "I need help" goes Live; a high flag nobody answers buzzes, goes Live at 60 s, alarms at 120 s, and a shout sends SOS; "tolong" in normal talk does nothing; offline uploads retry; a killed ride is closed and sent; rides over 7 days are deleted; SOS offline offers 112; the safe phrase sends a silent SOS and goes Live; driver mode joins with no consent prompt; a driver with no ride waiting is told |
+| `test/engine_test.dart` | Classifier labels, flags and scores. Engine: ordinary talk, warning and cooldown, the safe phrase as a high flag that counts on the ladder, high once per ride, the 15-second window, a threat below the high threshold |
+| `test/trip_screen_test.dart` | Consent yes starts recording and listening; "Not now" records nothing and SOS works; no recording without Safe Ride or the mic; a warning ignored stays on the phone; a report sends at end, and "Yes, get help" goes Live; a high flag answered okay sends at end, "I need help" goes Live; a high flag nobody answers buzzes, goes Live at 60 s, alarms at 120 s, and a shout sends SOS; "tolong" in normal talk does nothing; offline uploads retry; a killed ride is closed and sent; rides over 7 days are deleted; SOS offline offers 112; the safe phrase sends a silent high flag and goes Live at once, and as the 3rd high flag an SOS; a warning and an SOS vibrate, a report doesn't; driver mode joins with no consent prompt; a driver with no ride waiting is told |
 | `test/file_ride_store_test.dart` | Pieces are counted and read back by number; details round-trip (role, share level, pieces sent); a deleted ride leaves no folder; unreadable details are dropped |
 
 ## Testing with a real voice (laptop models)

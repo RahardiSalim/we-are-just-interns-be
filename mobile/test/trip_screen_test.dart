@@ -127,6 +127,7 @@ class Harness {
   final heard = StreamController<String>();
   final alerts = <String>[];
   final dialed = <String>[];
+  int vibrated = 0;
   bool driverSafeRide = true;
   SafetyEngine Function()? engine;
 
@@ -150,6 +151,7 @@ class Harness {
           alert: ({required loud}) async => alerts.add(loud ? 'alarm' : 'buzz'),
           clearAlert: () async => alerts.add('clear'),
           dial: (number) async => dialed.add(number),
+          vibrate: () async => vibrated++,
           safePhrase: const SafePhrase('Pak, nanti lewat jalan biasa aja ya'),
         ),
       ),
@@ -479,20 +481,63 @@ void main() {
     },
   );
 
-  testWidgets('the safe phrase sends a silent SOS, once, and goes live', (
+  testWidgets('the safe phrase sends a silent high flag, once, and goes live at once', (
     tester,
   ) async {
     final h = Harness();
     await h.pump(tester);
     await h.startRide(tester);
     await h.say(tester, 'Pak nanti lewat jalan biasa saja ya');
+    await tester.pumpAndSettle();
 
-    expect(h.api.reports.map((r) => r.$1), ['sos']);
+    final (trigger, evidence) = h.api.reports.single;
+    expect(trigger, 'auto');
+    expect((evidence!.verdict.label, evidence.verdict.score), (Label.threat, 1.0));
     expect(find.text(SafetyText.askTitle), findsNothing, reason: 'silent');
-    expect(h.alerts, isEmpty, reason: 'nothing the other person could hear');
-    expect(h.recorder.live, isTrue);
+    expect(h.alerts, isEmpty, reason: 'no notification or alarm the other person could hear');
+    expect(h.vibrated, 1, reason: 'one short vibration');
+    expect(h.recorder.live, isTrue, reason: 'Live at once, not after 60 s');
+    expect(h.api.saves.last, endsWith(':live:-'));
+    expect([for (final m in (await h.store.rides()).single.markers) m['kind']], ['high']);
     await h.say(tester, 'Pak, nanti lewat jalan biasa aja ya.');
     expect(h.api.reports, hasLength(1), reason: 'once per ride');
+  });
+
+  testWidgets('the safe phrase counts on the high ladder: after two high flags it is an SOS', (
+    tester,
+  ) async {
+    final h = Harness();
+    await h.pump(tester);
+    await h.startRide(tester);
+    await h.say(tester, harassment);
+    await tapIn(tester, find.text(SafetyText.askOk));
+    await tester.pumpAndSettle();
+    await h.say(tester, harassment); // a new offending line: the 2nd high flag
+    await tapIn(tester, find.text(SafetyText.askOk));
+    await tester.pumpAndSettle();
+    expect(h.api.reports.map((r) => r.$1), ['auto', 'auto']);
+
+    await h.say(tester, 'Pak, nanti lewat jalan biasa aja ya.');
+    await tester.pumpAndSettle();
+    expect(h.api.reports.map((r) => r.$1), ['auto', 'auto', 'sos'], reason: 'the 3rd high flag');
+    expect(find.text(SafetyText.helpSentTitle), findsNothing, reason: 'still silent');
+    expect(h.vibrated, 1);
+  });
+
+  testWidgets('vibration: a warning and an SOS vibrate; a report does not', (tester) async {
+    final h = Harness();
+    await h.pump(tester);
+    await h.startRide(tester);
+    await h.say(tester, uncomfortable);
+    expect(h.vibrated, 1, reason: 'warning');
+    await tapIn(tester, find.text(SafetyText.warningReport));
+    await tester.pumpAndSettle();
+    expect(h.api.reports.map((r) => r.$1), ['manual_unsafe']);
+    expect(h.vibrated, 1, reason: 'a report does not vibrate');
+    await tapIn(tester, find.text(SafetyText.needHelpYes));
+    await tester.pumpAndSettle();
+    expect(h.api.reports.map((r) => r.$1), ['manual_unsafe', 'sos']);
+    expect(h.vibrated, 2, reason: 'SOS');
   });
 
   testWidgets(
@@ -550,7 +595,7 @@ void main() {
         tester,
         'mas ac nya dingin banget ya',
       ); // as speech-to-text writes it
-      expect(h.api.reports.map((r) => r.$1), ['sos']);
+      expect(h.api.reports.map((r) => r.$1), ['auto']);
     },
   );
 

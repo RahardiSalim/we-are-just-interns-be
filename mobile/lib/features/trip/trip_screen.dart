@@ -74,6 +74,7 @@ class TripScreen extends StatefulWidget {
     this.alert,
     this.clearAlert,
     this.dial,
+    this.vibrate,
     this.safePhrase,
     this.describe,
     this.autoStart = false,
@@ -101,8 +102,12 @@ class TripScreen extends StatefulWidget {
   /// Opens the phone's dialer with a number (no call is placed without the user). Null on the web.
   final Future<void> Function(String number)? dial;
 
-  /// The hands-free SOS: hearing it sends a silent SOS (no dialog, no alarm the other person could
-  /// notice). Null turns it off.
+  /// One short vibration on this phone, no sound and no notification: a warning, a silent high flag
+  /// (the safe phrase) or an SOS. A high flag's "Are you okay?" buzzes through [alert] instead. Null on the web.
+  final Future<void> Function()? vibrate;
+
+  /// The hands-free alarm: hearing it sends a high flag and goes Live at once, silently (no dialog, no
+  /// alarm the other person could notice; one short vibration). Null turns it off.
   final SafePhrase? safePhrase;
 
   /// A note shown under each heard line, e.g. the dev classifier's raw label. Null shows nothing.
@@ -380,7 +385,7 @@ class _TripScreenState extends State<TripScreen> {
     _persist();
     if (!_safePhraseUsed && (_phrase?.heardIn(text) ?? false)) {
       _safePhraseUsed = true;
-      _sos(); // silent: no dialog, no alarm
+      _silentHigh(_engine.safePhrase(d), at, text);
       return;
     }
     if (_shout && _helpWords.any((w) => w.heardIn(text))) {
@@ -391,6 +396,7 @@ class _TripScreenState extends State<TripScreen> {
     switch (d.action) {
       case SafetyAction.warn:
         _mark(Marker(at, 'warning', verdict: d.verdict, text: text));
+        widget.vibrate?.call();
         // 1st: stays on the phone. 2nd: the whole recording goes to the safety team at the end.
         if (d.nth >= 2) _raise(Share.atEnd);
         // A warning never replaces an open "Are you okay?": that question matters more.
@@ -470,12 +476,28 @@ class _TripScreenState extends State<TripScreen> {
     Navigator.of(context).pop();
   }
 
-  /// SOS button, "I need help", "Yes, get help", the safe phrase, or a shout for help.
+  /// The safe phrase: a high flag (`auto`) sent at once and Live at once, silently: no pop-up and no
+  /// alarm the other person could notice, only one short vibration. It counts on the ladder, so as the
+  /// 3rd high flag it is an SOS (still silent).
+  void _silentHigh(Decision d, Duration at, String text) {
+    setState(() => _last = d);
+    _mark(Marker(at, 'high', verdict: d.verdict, text: text));
+    if (d.nth >= 3) {
+      _sos();
+      return;
+    }
+    widget.vibrate?.call();
+    _deliver('auto', d); // a repeat joins the ride's open case
+    _goLive();
+  }
+
+  /// SOS button, "I need help", "Yes, get help", the 3rd high flag, or a shout for help.
   /// [announce]: sent on the person's behalf (the 3rd high flag), so say so in a pop-up.
   Future<void> _sos({bool announce = false}) async {
     if (_tripId == null) return; // the ride is still starting
     _closePopup();
     _endHighCheck();
+    widget.vibrate?.call();
     _mark(Marker(_sinceStart, 'sos', verdict: _last?.verdict));
     _goLive();
     if (!await _deliver('sos', _last) || !mounted) return;

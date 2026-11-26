@@ -15,6 +15,9 @@ abstract final class Ride {
       _ch.invokeMethod('alert', {'title': title, 'body': body, 'loud': loud});
   static Future<void> clearAlert() => _ch.invokeMethod('clearAlert');
 
+  /// One short vibration, no sound, no notification.
+  static Future<void> vibrate() => _ch.invokeMethod('vibrate');
+
   /// Opens the dialer with the number filled in. The user still presses call.
   static Future<void> dial(String number) =>
       _ch.invokeMethod('dial', {'number': number});

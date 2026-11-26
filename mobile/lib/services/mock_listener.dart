@@ -13,7 +13,7 @@ const demoConversation = [
   'Pak, saya mau turun di depan aja.',
 ];
 
-/// For demoing the hands-free SOS (`--dart-define=DEMO_SCRIPT=safe_phrase`): nothing rude is said,
+/// For demoing the hands-free alarm (`--dart-define=DEMO_SCRIPT=safe_phrase`): nothing rude is said,
 /// the rider just says the safe phrase, and a silent SOS goes out.
 const safePhraseConversation = [
   'Selamat malam Mbak, sesuai aplikasi ya.',

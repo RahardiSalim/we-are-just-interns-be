@@ -26,7 +26,7 @@ def transcribe(clip_path: str | None) -> list[dict]:
 def severity(trigger: str, label: str | None) -> str:
     if trigger in ("auto", "sos"):
         # auto: the phone only reports on its own at the high threshold. sos: always a person, at once;
-        # a check-in would also ask the driver, which gives away a silent (safe phrase) SOS.
+        # a check-in would also ask the driver, which gives away a silent report (the safe phrase is an auto flag).
         return "high"
     if label in ("threat", "sexual_harassment"):
         return "high"
