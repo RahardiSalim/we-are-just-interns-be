@@ -400,7 +400,7 @@ function byPhone(incident: Incident, uid: string | undefined): Report[] {
 }
 
 function PhoneReport({ who, role, person, reports }: { who: string; role: string; person?: Person; reports: Report[] }) {
-  const name = person?.displayName.replace(/\s*\(.*\)$/, ""); // seed names read "Rina (rider)"
+  const name = person?.displayName?.replace(/\s*\(.*\)$/, ""); // seed names read "Rina (rider)"; a real phone user may have no name yet
   return (
     <Card title={who} aside={<span className="rounded-full bg-surface px-2.5 py-0.5 text-caption font-semibold">{role}</span>}>
       <div className="-mt-1 flex items-center gap-3 rounded-chip bg-surface px-3 py-2">

@@ -140,3 +140,45 @@ def test_a_broken_smtp_server_never_raises(monkeypatch):
 
     monkeypatch.setattr(mailer.smtplib, "SMTP", boom)
     mailer.send("rider1@gosafe.test", "Hi", "Body")
+
+
+class FakeResponse:
+    def __init__(self, status_code=200, text=""):
+        self.status_code, self.text = status_code, text
+
+
+def test_resend_sends_over_https_with_the_pictures_inline_and_no_smtp(monkeypatch):
+    sent = []
+    monkeypatch.setattr(config, "RESEND_API_KEY", "re_test")
+    monkeypatch.setattr(config, "SMTP_HOST", "smtp.test")
+    monkeypatch.setattr(mailer.smtplib, "SMTP", FakeSMTP)
+    FakeSMTP.sent.clear()
+    monkeypatch.setattr(mailer.httpx, "post", lambda url, headers, json, timeout: sent.append((url, headers, json)) or FakeResponse())
+    e = email_content.decision_emails("none", "none")[0]
+    mailer.send("rider1@gosafe.test", "Update on your report", email_content.text(e, *ARGS), email_content.html(e, *ARGS))
+    ((url, headers, body),) = sent
+    assert url == "https://api.resend.com/emails" and headers["Authorization"] == "Bearer re_test"
+    assert (body["from"], body["to"], body["subject"]) == (config.RESEND_FROM, ["rider1@gosafe.test"], "Update on your report")
+    assert "Hi Rani," in body["text"] and "Hi Rani," in body["html"]
+    cids = set(re.findall(r'src="cid:([\w-]+)"', body["html"]))
+    assert cids and {a["content_id"] for a in body["attachments"]} == cids  # every picture the HTML uses is attached inline
+    assert FakeSMTP.sent == []
+
+
+def test_a_resend_error_never_raises(monkeypatch):
+    monkeypatch.setattr(config, "RESEND_API_KEY", "re_test")
+    monkeypatch.setattr(mailer.httpx, "post", lambda *_a, **_k: FakeResponse(403, "not allowed to send to this address"))
+    mailer.send("someone@else.test", "Hi", "Body")
+
+    def boom(*_a, **_k):
+        raise OSError("no network")
+
+    monkeypatch.setattr(mailer.httpx, "post", boom)
+    mailer.send("someone@else.test", "Hi", "Body")
+
+
+def test_without_any_mail_setting_nothing_is_sent(monkeypatch):
+    monkeypatch.setattr(config, "RESEND_API_KEY", "")
+    monkeypatch.setattr(config, "SMTP_HOST", "")
+    monkeypatch.setattr(mailer.httpx, "post", lambda *_a, **_k: (_ for _ in ()).throw(AssertionError("must not call Resend")))
+    mailer.send("rider1@gosafe.test", "Hi", "Body")

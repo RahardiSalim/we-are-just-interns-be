@@ -18,6 +18,10 @@ SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
 SMTP_USER = os.getenv("SMTP_USER", "")
 SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "")
 EMAIL_FROM = os.getenv("EMAIL_FROM", "GoSafe <no-reply@gosafe.test>")
+# Email over HTTPS through Resend, for hosts that block SMTP ports (Render's free tier does). Takes priority over SMTP.
+RESEND_API_KEY = os.getenv("RESEND_API_KEY", "")
+# Resend's test sender (resend.dev) can only send to the address of the Resend account itself; verify a domain to send to anyone.
+RESEND_FROM = os.getenv("RESEND_FROM", "GoSafe <onboarding@resend.dev>")
 GEMINI_BASE_URL = os.getenv("GEMINI_BASE_URL", "https://generativelanguage.googleapis.com/v1beta/openai")
 # Cloudflare R2 for ride audio. When R2_BUCKET is set it replaces Firebase Storage and the Storage emulator.
 R2_ACCOUNT_ID = os.getenv("R2_ACCOUNT_ID", "")

@@ -1,0 +1,62 @@
+id,scenario,speaker,text,label,kind,expect
+A01,A_normal,driver,"Halo kak, sesuai aplikasi ya, ke Kuningan City?",normal,logistics,none
+A02,A_normal,passenger,"Iya bang, btw boleh lewat Casablanca aja, soalnya Sudirman macet parah.",normal,logistics,none
+A03,A_normal,driver,"Siap kak. Lagi buru-buru ya?",normal,smalltalk,none
+A04,A_normal,passenger,"Iya nih, ada meeting jam tiga, literally udah telat.",normal,smalltalk,none
+A05,A_normal,driver,"Aman kak, saya cari jalan tikus deh.",normal,logistics,none
+A06,A_normal,passenger,"Thanks bang, sorry ya jadi ngerepotin.",normal,smalltalk,none
+A07,A_normal,driver,"Santai aja kak. Helmnya udah pas belum?",normal,logistics,none
+A08,A_normal,passenger,"Udah kok. Eh bang, nanti berhenti di lobby depan aja ya.",normal,logistics,none
+A09,A_normal,driver,"Oke, udah sampai ya kak. Jangan lupa bintang limanya, hehe.",normal,smalltalk,none
+A10,A_normal,passenger,"Pasti bang, makasih banyak, hati-hati di jalan.",normal,smalltalk,none
+B01,B_friendly_swear,passenger,"Anjir macet banget, gila sih ini jam pulang kantor.",normal,friendly_swear,none
+B02,B_friendly_swear,driver,"Iya kak, emang anjing nih jalanan kalau jam segini.",normal,friendly_swear,none
+B03,B_friendly_swear,passenger,"Asli, tadi bos gue juga bangsat banget, kerjaan numpuk.",normal,friendly_swear,none
+B04,B_friendly_swear,driver,"Wah sabar kak, emang kadang kerjaan bikin stres.",normal,smalltalk,none
+B05,B_friendly_swear,passenger,"Shit, HP gue lowbat. Bang, ada charger gak?",normal,friendly_swear,none
+B06,B_friendly_swear,driver,"Ada kak, colok aja di belakang.",normal,logistics,none
+B07,B_friendly_swear,passenger,"Fuck, laptop gue ketinggalan. Udah lah, gapapa, lanjut aja.",normal,friendly_swear,none
+C01,C_argument,passenger,"Pak, kok muter-muter sih? Ini bukan jalan yang di aplikasi.",normal,service_conflict,none
+C02,C_argument,driver,"Ini lebih cepat kak, percaya aja sama saya.",normal,service_conflict,none
+C03,C_argument,passenger,"Lebih cepat apanya, argonya jadi mahal gini!",normal,service_conflict,none
+C04,C_argument,driver,"Kakak jangan ngegas dong, saya udah capek seharian.",normal,service_conflict,none
+C05,C_argument,passenger,"Goblok banget sih lu, bisa nyetir gak?",uncomfortable,insult,warning
+C06,C_argument,driver,"Heh, jaga mulut lu ya, dasar cewek tolol.",uncomfortable,insult,warning
+C07,C_argument,passenger,"Udah, saya turun di sini aja. Nanti saya lapor.",uncomfortable,refusal,none
+D01,D_harassment,driver,"Kak, kerja di mana? Kok pulangnya malam terus?",uncomfortable,probing,none
+D02,D_harassment,passenger,"Di kantor aja pak. Fokus nyetir aja ya.",normal,refusal,none
+D03,D_harassment,driver,"Udah punya pacar belum? Tinggal sendirian ya di kos?",uncomfortable,probing,warning
+D04,D_harassment,passenger,"Pak, itu bukan urusan bapak.",uncomfortable,refusal,none
+D05,D_harassment,driver,"Minta nomor WA-nya dong kak, biar bisa jemput lagi besok.",uncomfortable,contact,warning
+D06,D_harassment,driver,"Cantik banget sih kamu, badannya juga seksi.",sexual_harassment,appearance,high
+D07,D_harassment,driver,"Mampir dulu yuk ke tempat saya, gak jauh kok.",sexual_harassment,explicit,high
+D08,D_harassment,passenger,"Pak, berhenti di sini aja. Saya mau turun sekarang.",uncomfortable,refusal,none
+E01,E_threat,driver,"Kak, jangan banyak tanya ya, ikutin aja.",threat,intimidation,warning
+E02,E_threat,passenger,"Pak, kok belok ke sini? Ini bukan arahnya.",normal,service_conflict,none
+E03,E_threat,driver,"Diam aja, saya tahu rumah kamu di mana.",threat,intimidation,high
+E04,E_threat,driver,"Awas kamu kalau berani lapor-lapor.",threat,intimidation,high
+E05,E_threat,passenger,"Tolong pak, berhenti! Tolong!",threat,distress,high
+E06,E_threat,driver,"Lu mau gue habisin? Shut up, diem!",threat,intimidation,high
+F01,F_passenger_on_driver,passenger,"Bang, lu jangan macem-macem ya, gue bawa pisau.",threat,intimidation,high
+F02,F_passenger_on_driver,passenger,"Cepetan, kalau telat gue hajar lu.",threat,intimidation,high
+F03,F_passenger_on_driver,driver,"Mas, tolong jangan kasar, saya cuma nganter.",normal,refusal,none
+F04,F_passenger_on_driver,passenger,"Bacot! Dasar sopir miskin, bajingan.",uncomfortable,insult,warning
+G01,G_safe_phrase,passenger,"Pak, nanti lewat jalan biasa aja ya.",threat,safe_phrase,sos
+G02,G_safe_phrase,passenger,"Oh iya Pak, nanti lewat jalan biasa aja ya, saya buru-buru.",threat,safe_phrase,sos
+G03,G_safe_phrase,passenger,"Pak, lewat jalan tol aja ya biar cepet.",normal,near_miss,none
+G04,G_safe_phrase,passenger,"Jalan biasa macet gak sih Pak?",normal,near_miss,none
+G05,G_safe_phrase,passenger,"Iya pak, lewat jalan biasa aja nggak apa-apa.",normal,near_miss,none
+H01,H_look_alike,passenger,"Pak, tolong belok kiri di depan ya.",normal,look_alike,none
+H02,H_look_alike,passenger,"Anak saya basah kena hujan, nanti saya buka bajunya di rumah.",normal,look_alike,none
+H03,H_look_alike,driver,"Saya tahu rumah makan padang yang enak di sini.",normal,look_alike,none
+H04,H_look_alike,driver,"Awas kamu jatuh kak, jalannya licin.",normal,look_alike,none
+H05,H_look_alike,passenger,"Sayangnya hujan ya, padahal mau jogging.",normal,look_alike,none
+H06,H_look_alike,passenger,"Pacar saya juga kerja di Sudirman.",normal,look_alike,none
+H07,H_look_alike,passenger,"Nomor rumahnya dua belas, yang pagar hitam.",normal,look_alike,none
+H08,H_look_alike,passenger,"Hotelnya di sebelah kanan ya Pak, yang ada lobby-nya.",normal,look_alike,none
+H09,H_look_alike,passenger,"Anjingnya tetangga saya lucu banget.",normal,look_alike,none
+H10,H_look_alike,driver,"Wah adik saya cantik banget pas wisuda kemarin.",normal,look_alike,none
+H11,H_look_alike,passenger,"Bunuh waktu aja lah, main HP sambil nunggu.",normal,look_alike,none
+I01,I_no_speech,none,"(30 detik diam: jangan bicara)",none,silence,no_text
+I02,I_no_speech,none,"(30 detik suara jalan atau motor: jangan bicara)",none,noise,no_text
+I03,I_no_speech,none,"(30 detik musik atau radio: jangan bicara)",none,music,no_text

@@ -16,15 +16,24 @@ import 'engine/safety_engine.dart';
 import 'services/api.dart';
 import 'services/dev_ml.dart';
 import 'services/mock_listener.dart';
+import 'services/on_device_stt.dart';
 import 'services/file_ride_store.dart';
 import 'services/recorder.dart';
 import 'services/ride.dart';
 import 'services/ride_store.dart';
 import 'theme.dart';
 
-// shortcut: only the local emulators exist so far (offline project demo-gosafe). Use real
-// FirebaseOptions (flutterfire configure) and USE_EMULATORS=false once the Firebase project exists.
+// Defaults are the offline emulator project (demo-gosafe). For a real Firebase project pass
+// USE_EMULATORS=false and FIREBASE_API_KEY / FIREBASE_APP_ID / FIREBASE_PROJECT_ID / FIREBASE_SENDER_ID
+// (Firebase console > Project settings > Your apps > the Android app). These are public client
+// settings, not secrets.
 const _useEmulators = bool.fromEnvironment('USE_EMULATORS', defaultValue: true);
+const _firebaseOptions = FirebaseOptions(
+  apiKey: String.fromEnvironment('FIREBASE_API_KEY', defaultValue: 'demo-key'),
+  appId: String.fromEnvironment('FIREBASE_APP_ID', defaultValue: '1:1:android:1'),
+  messagingSenderId: String.fromEnvironment('FIREBASE_SENDER_ID', defaultValue: '1'),
+  projectId: String.fromEnvironment('FIREBASE_PROJECT_ID', defaultValue: 'demo-gosafe'),
+);
 // 10.0.2.2 is this Mac as seen from the Android emulator.
 const _emulatorHost = String.fromEnvironment('EMULATOR_HOST');
 const _devMlUrl = String.fromEnvironment('DEV_ML');
@@ -35,17 +44,17 @@ final _scenario = scenarioNamed(
   kIsWeb ? Uri.base.queryParameters['scenario'] ?? _demoScript : _demoScript,
 );
 final _devMl = _devMlUrl.isEmpty ? null : DevClassifier(Uri.parse(_devMlUrl));
+// Experiment: speech-to-text on the phone itself (services/on_device_stt.dart). WHISPER_MODEL is the
+// ggml file on the phone, WHISPER_VAD the Silero ggml file, WHISPER_TEST_WAV a 16 kHz mono WAV to
+// hear instead of the microphone.
+const _whisperModel = String.fromEnvironment('WHISPER_MODEL');
+const _whisperVad = String.fromEnvironment('WHISPER_VAD');
+const _whisperTestWav = String.fromEnvironment('WHISPER_TEST_WAV');
+const _whisperChunkSecs = int.fromEnvironment('WHISPER_CHUNK_SECS', defaultValue: 6);
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: const FirebaseOptions(
-      apiKey: 'demo-key',
-      appId: '1:1:android:1',
-      messagingSenderId: '1',
-      projectId: 'demo-gosafe',
-    ),
-  );
+  await Firebase.initializeApp(options: _firebaseOptions);
   final auth = FirebaseAuth.instance;
   if (_useEmulators) {
     final host = _emulatorHost.isNotEmpty
@@ -102,8 +111,16 @@ class GoSafeApp extends StatelessWidget {
         recorder: MicRecorder(store),
         store: store,
         // DEV_ML: the real mic through the laptop's Whisper and classifier (stt/dev_server.py).
+        // WHISPER_MODEL: speech-to-text on the phone. Otherwise a test scenario, or the demo conversation.
         listen: dev != null
             ? () => devListener(dev.server, dev)
+            : _whisperModel.isNotEmpty
+            ? () => onDeviceListener(
+                modelPath: _whisperModel,
+                vadModelPath: _whisperVad.isEmpty ? null : _whisperVad,
+                pcm: _whisperTestWav.isEmpty ? null : pcmFromWav(_whisperTestWav),
+                chunkSecs: _whisperChunkSecs,
+              )
             : _scenario != null
             ? () => scriptedListener(
                 lines: [for (final (t, _) in _scenario!.lines) t],
