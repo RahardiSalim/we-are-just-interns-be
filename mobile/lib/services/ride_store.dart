@@ -99,6 +99,10 @@ abstract interface class RideStore {
   Future<void> save(RideMeta meta);
   Future<List<RideMeta>> rides();
   Future<void> delete(String tripId);
+
+  /// The user's own safe phrase (the hands-free SOS), kept encrypted with the rides. Null until set.
+  Future<String?> safePhrase();
+  Future<void> setSafePhrase(String phrase);
 }
 
 /// Deletes rides older than [keepFor] and returns the ones kept.
@@ -117,6 +121,13 @@ Future<List<RideMeta>> tidy(RideStore store, DateTime now) async {
 class MemoryRideStore implements RideStore {
   final _pieces = <String, Map<int, Uint8List>>{};
   final _meta = <String, Uint8List>{};
+  String? _phrase;
+
+  @override
+  Future<String?> safePhrase() async => _phrase;
+
+  @override
+  Future<void> setSafePhrase(String phrase) async => _phrase = phrase;
 
   @override
   Future<void> addPiece(String tripId, int index, Uint8List bytes) async =>

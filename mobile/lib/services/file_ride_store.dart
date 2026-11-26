@@ -1,3 +1,4 @@
+import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 
@@ -58,6 +59,24 @@ class FileRideStore implements RideStore {
       }
     }
     return out;
+  }
+
+  File get _phraseFile => File('${root.path}/safe_phrase.enc');
+
+  @override
+  Future<String?> safePhrase() async {
+    if (!_phraseFile.existsSync()) return null;
+    try {
+      return utf8.decode(await open(_phraseFile.path));
+    } catch (_) {
+      return null; // sealed by a key that's gone (app reinstalled): ask again
+    }
+  }
+
+  @override
+  Future<void> setSafePhrase(String phrase) async {
+    await root.create(recursive: true);
+    await seal(_phraseFile.path, utf8.encode(phrase));
   }
 
   @override

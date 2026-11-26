@@ -10,7 +10,7 @@ This guide describes the app as it is built today. The product decisions behind 
 |---|---|
 | Start ride, consent prompt, no login (anonymous sign-in) | Built |
 | Microphone recording for the whole ride | Built (`record` package, AAC on Android, WAV in the browser preview) |
-| Decision engine (30 s window, classifier, rules) | Built and tested |
+| Decision engine (15 s window, classifier, rules) | Built and tested |
 | Warning, high flag sent at once, "Are you okay?", SOS, Report driver / passenger | Built and tested |
 | Rider and driver on the same app (switch on the home screen, demo only) | Built and tested (driver mode not yet run on a device) |
 | Share levels: local, at end, live (see "What leaves the phone, and when") | Built and tested; Live tested on the Android emulator |
@@ -96,7 +96,7 @@ Each recorded ride gets a folder in the app's private storage, `rides/<order ID>
 | Upload succeeded | "uploaded" | `meta.enc` |
 | App start, then every minute | Rides older than 7 days are deleted. Unfinished rides from a crash are closed. Flagged rides not yet sent are uploaded | |
 
-Why pieces: if the app is killed, the phone restarts or the battery dies, the ride up to the last 30 seconds is already saved and encrypted. ADTS pieces join byte for byte, so the upload is one file.
+Why pieces: if the app is killed, the phone restarts or the battery dies, the ride up to the last 15 seconds is already saved and encrypted. ADTS pieces join byte for byte, so the upload is one file.
 
 ## When things go wrong
 
@@ -105,17 +105,17 @@ Why pieces: if the app is killed, the phone restarts or the battery dies, the ri
 | SOS with no signal | A red banner: "We can't reach our safety team right now. We'll keep trying. If you are in danger, call 112." with a **Call 112** button (opens the dialer with 112 filled in; the rider presses call). The app retries the SOS every 5 to 10 seconds until it goes through, then shows "We're on it" |
 | High flag or a report with no signal | Retried in the background, waiting longer each time (up to a minute) |
 | End ride with no signal | The recording stays queued: "We'll send the recording to our safety team as soon as you're online." Retried every minute while the app is open, for up to 7 days |
-| App killed or phone off mid-ride | Pieces up to the last 30 seconds are saved. At next launch the ride is closed (its length taken from the last line or marker) and, if it was flagged, uploaded |
+| App killed or phone off mid-ride | Pieces up to the last 15 seconds are saved. At next launch the ride is closed (its length taken from the last line or marker) and, if it was flagged, uploaded |
 | Alarm, phone call, music, or a Bluetooth headset disconnecting during the ride | Recording continues (`audioInterruption: none`, `audioRouteChange: follow`) |
 | App reinstalled | The Keystore key is gone, so old rides can't be opened; they're deleted |
 
 ## Hands-free SOS: the safe phrase
 
-On a motorbike, tapping SOS is the hard part. The rider can say a natural-sounding sentence instead, by default **"Pak, nanti lewat jalan biasa aja ya"**. When speech-to-text hears it, the phone sends an SOS **silently**: no dialog and no alarm the driver could notice. The backend always escalates an SOS straight to an agent, and never sends a check-in that would reach the driver.
+On a motorbike, tapping SOS is the hard part. The rider or the driver can say a natural-sounding sentence instead, by default **"Pak, nanti lewat jalan biasa aja ya"**. When speech-to-text hears it, the phone sends an SOS **silently**: no dialog and no alarm the driver could notice. The backend always escalates an SOS straight to an agent, and never sends a check-in that would reach the driver.
 
 - **No model needed.** It matches the speech-to-text output (`lib/engine/safe_phrase.dart`): words are lower-cased and stripped of punctuation, then compared word by word, allowing one slip per six words (a word missed, or a word one letter off, like "aja" → "saja" or "ya" → "yah"). The phrase can sit inside a longer sentence.
 - **Once per ride.** Saying it again doesn't send a second SOS.
-- **Setting it:** today one phrase for everyone, set with `--dart-define=SAFE_PHRASE=...`. A per-rider setting is not built yet.
+- **Setting it:** each person sets their own, rider and driver alike: **Safe phrase → Set / Change** on the home screen. It's kept on the phone, encrypted like the rides (`safe_phrase.enc`), never sent anywhere. 4 to 12 words; shorter phrases are refused because they'd fire by accident. Until one is set, the default is `--dart-define=SAFE_PHRASE=...` ("Pak, nanti lewat jalan biasa aja ya").
 - **Demo:** `flutter run --dart-define=DEMO_SCRIPT=safe_phrase` plays a short ride where the rider says the phrase.
 - **Limits:** it only works as well as speech-to-text hears the rider on a moving motorbike, which needs testing with the real model. Pick a phrase that's rare in normal rides, so it never fires by accident.
 
@@ -126,7 +126,7 @@ flowchart LR
     M[Microphone, whole ride] --> REC[(Ride recording)]
     M -.-> V[Voice detection]
     V -.-> S[Speech-to-text per utterance]
-    S --> W[30-second window]
+    S --> W[15-second window]
     W --> K[Classifier: label + score]
     K --> E[Decision rules]
     E --> R{Action}
@@ -137,9 +137,9 @@ flowchart LR
 
 The microphone really records. Voice detection and speech-to-text (the dotted part) are still in the making, so `mock_listener.dart` stands in: it plays a scripted Indonesian conversation, one line every 3 seconds. Everything from the window onwards is the real logic.
 
-### Step 1: the 30-second window
+### Step 1: the 15-second window
 
-Every finished utterance is added to a list with the time it was heard. Lines older than 30 seconds are dropped. The classifier always judges the whole window, so a remark is read in context. When the phone sends a flag, this window is the evidence; each line's `start` and `end` are seconds from the first line in the window.
+Every finished utterance is added to a list with the time it was heard. Lines older than 15 seconds are dropped. The classifier always judges the whole window, so a remark is read in context. When the phone sends a flag, this window is the evidence; each line's `start` and `end` are seconds from the first line in the window.
 
 ### Step 2: the classifier (temporary keyword filter)
 
@@ -171,7 +171,7 @@ How it scores the window:
 |---|---|---|
 | Warning threshold | 0.6 | Modelling team, from their test set |
 | High threshold | 0.8 | Modelling team, from their test set |
-| Window | 30 s | Fixed by the design |
+| Window | 15 s | Fixed by the design |
 | Warning cooldown | 10 min | Fixed by the design |
 
 What that means with the keyword filter:
@@ -295,7 +295,7 @@ Other calls: `POST /trips` (with `riderConsent`, or `role: driver`), `POST /me/c
 | `lib/theme.dart` | Design tokens and the app theme from [contracts/DESIGN.md](../contracts/DESIGN.md) (`GoSafeColors`, `GoSafeType`, `goSafeTheme`) |
 | `lib/features/trip/trip_screen.dart` | The ride: start, consent, recording, listening, every response, and the upload decision at the end |
 | `lib/features/safety/are_you_ok.dart` | All the wording (`SafetyText`), the consent prompt and the "Are you okay?" dialog |
-| `lib/engine/safety_engine.dart` | The 30-second window, the decision rules, and `Marker` |
+| `lib/engine/safety_engine.dart` | The 15-second window, the decision rules, and `Marker` |
 | `lib/engine/classifier.dart` | The `Classifier` interface and the temporary keyword filter |
 | `lib/services/recorder.dart` | Microphone recording for the whole ride as a stream, saved in 30-second pieces (`TripRecorder`: start, stop) |
 | `lib/services/ride_store.dart` | `RideMeta` (a ride's details), the `RideStore` interface, `tidy` (the 7-day rule), and an in-memory store for the web preview and tests |
@@ -320,9 +320,25 @@ Then set the real thresholds in `SafetyEngine`.
 
 | File | Covers |
 |---|---|
-| `test/engine_test.dart` | Classifier labels, flags and scores. Engine: ordinary talk, warning and cooldown, high once per ride, the 30-second window, a threat below the high threshold |
+| `test/engine_test.dart` | Classifier labels, flags and scores. Engine: ordinary talk, warning and cooldown, high once per ride, the 15-second window, a threat below the high threshold |
 | `test/trip_screen_test.dart` | Consent yes starts recording and listening; "Not now" records nothing and SOS works; no recording without Safe Ride or the mic; a warning ignored stays on the phone; a report sends at end, and "Yes, get help" goes Live; a high flag answered okay sends at end, "I need help" goes Live; a high flag nobody answers buzzes, goes Live at 60 s, alarms at 120 s, and a shout sends SOS; "tolong" in normal talk does nothing; offline uploads retry; a killed ride is closed and sent; rides over 7 days are deleted; SOS offline offers 112; the safe phrase sends a silent SOS and goes Live; driver mode joins with no consent prompt; a driver with no ride waiting is told |
 | `test/file_ride_store_test.dart` | Pieces are counted and read back by number; details round-trip (role, share level, pieces sent); a deleted ride leaves no folder; unreadable details are dropped |
+
+## Testing with a real voice (laptop models)
+
+Until Whisper and the classifier run on the phone, the web app can use them on the laptop: `stt/dev_server.py` runs Akmal's speech-to-text pipeline (Silero voice detection, Whisper maleo small, the hallucination filter) and the team's DistilBERT classifier.
+
+1. Put the models in `stt/models/` (git-ignored): `maleo-small-id-q8_0/ggml-small-id-q8_0.bin` (see `stt/models/README.md`) and `classifier/` (from `gosafe-classifier-distilbert-11.zip`).
+2. From `stt/`: `uv run --no-project --python 3.12 --with numpy --with scipy --with soundfile --with pywhispercpp --with torch --with transformers --with safetensors --with silero-vad python dev_server.py --port 7088 --whisper models/maleo-small-id-q8_0/ggml-small-id-q8_0.bin --classifier models/classifier` (add `--save-dir <folder outside the repo>` to keep every received piece for replay).
+3. From `mobile/`: `flutter run -d chrome --dart-define=DEV_ML=http://localhost:7088`, or `flutter build web --dart-define=DEV_ML=http://localhost:7088` and serve `build/web`.
+
+How it works (`lib/services/dev_ml.dart`):
+- The mic is sent in **15-second pieces**. A sentence still going at the end of a piece is carried into the next one, so it's never cut.
+- Each line shows the classifier's raw label next to it, e.g. `CONTACT_SOLICIT 0.99`.
+- **Classifier rule:** the keywords decide on their own; the team model alone can only add a warning, and only at 0.9 or more (it isn't validated: about 11% of friendly chat gets a harmful label); where both agree, the higher score counts. Its 11 labels map onto the app's 4 in `devLabelMap` (our mapping; the team should confirm it).
+- **Keywords** allow Indonesian suffixes ("buka bajunya") and include swear words (uncomfortable: a warning, never high) and slurs (sexual harassment).
+- The service prints KEPT or DROP for every segment. It keeps real speech before an invented YouTube outro ("like share dan subscribe") instead of dropping the whole segment.
+- Web only: on Android the ride recorder and this listener would compete for the mic.
 
 ## Running it
 

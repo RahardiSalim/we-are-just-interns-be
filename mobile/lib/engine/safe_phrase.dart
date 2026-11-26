@@ -7,6 +7,15 @@ class SafePhrase {
   const SafePhrase(this.phrase);
   final String phrase;
 
+  /// Why a phrase won't work well, or null if it's fine. Short phrases fire by accident and leave no
+  /// room for a transcription slip; 4 words is the least.
+  static String? problem(String phrase) {
+    final n = _words(phrase).length;
+    if (n < 4) return 'Use at least 4 words, so it never fires by accident.';
+    if (n > 12) return 'Keep it under 12 words, so it\'s easy to say.';
+    return null;
+  }
+
   /// True when the line contains the phrase, give or take one word per six.
   bool heardIn(String line) {
     final p = _words(phrase);

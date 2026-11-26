@@ -47,7 +47,7 @@ void main() {
         SafetyAction.none,
         reason: 'within 10 minutes',
       );
-      // 10 minutes later the old line has left the 30 s window, so a new remark is needed
+      // 10 minutes later the old line has left the 15 s window, so a new remark is needed
       expect(
         hear('Umur berapa sih?', after: const Duration(minutes: 10)).action,
         SafetyAction.warn,
@@ -77,12 +77,12 @@ void main() {
       );
     });
 
-    test('only the last 30 seconds count', () {
+    test('only the last 15 seconds count', () {
       hear(
         'Cantik banget sih.',
         after: Duration.zero,
       ); // a warning-level hit...
-      final d = hear('Oke, sampai.', after: const Duration(seconds: 31));
+      final d = hear('Oke, sampai.', after: const Duration(seconds: 16));
       expect(
         d.verdict.label,
         Label.normal,
@@ -100,4 +100,37 @@ void main() {
       expect(weak.hear('Awas kamu.').action, SafetyAction.warn);
     });
   });
+
+  test('keywords still match with Indonesian suffixes (-nya, -mu, -ku)', () {
+    final c = KeywordClassifier();
+    expect(c.classify(['Buka bajunya dong.']).label, Label.sexualHarassment);
+    expect(c.classify(['Saya tahu rumahmu.']).label, Label.threat);
+    expect(c.classify(['Sayangnya hujan.']).label, Label.normal);
+    expect(
+      c.classify(['Sayang, kamu mau ke mana?']).label,
+      Label.uncomfortable,
+    );
+  });
+
+  test(
+    'swearing is uncomfortable, slurs are harassment, neither is high alone',
+    () {
+      final c = KeywordClassifier();
+      expect(c.classify(['Anjing lu, bangsat!']).label, Label.uncomfortable);
+      expect(c.classify(['Dasar perempuan bodoh.']).label, Label.uncomfortable);
+      expect(c.classify(['What the fuck, Pak.']).label, Label.uncomfortable);
+      expect(c.classify(['Dasar lonte.']).label, Label.sexualHarassment);
+      expect(
+        c.classify(['Anjingnya lucu banget.']).label,
+        Label.normal,
+        reason: 'the pet, not the insult',
+      );
+      final e = SafetyEngine(classifier: c);
+      expect(
+        e.hear('Anjing! Bangsat! Bajingan! Goblok!').action,
+        isNot(SafetyAction.high),
+        reason: 'anger alone never sends a high flag',
+      );
+    },
+  );
 }

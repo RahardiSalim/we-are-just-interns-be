@@ -61,6 +61,11 @@ class KeywordClassifier implements Classifier {
       'buka baju',
       'telanjang',
       'bugil',
+      // Slurs that call a woman a prostitute: harassment, not just swearing.
+      'lonte',
+      'perek',
+      'pelacur',
+      'jablay',
     ],
     Label.uncomfortable: [
       'tinggal sendiri',
@@ -71,12 +76,59 @@ class KeywordClassifier implements Classifier {
       'nomor wa',
       'umur berapa',
       'sayang',
+      // Swearing and insults: a kind warning, never a high flag on their own (anger isn't danger).
+      'anjing',
+      'anjir',
+      'babi',
+      'bangsat',
+      'bajingan',
+      'brengsek',
+      'keparat',
+      'kampret',
+      'sialan',
+      'setan',
+      'tai',
+      'tahi',
+      'asu',
+      'jancok',
+      'jancuk',
+      'ngentot',
+      'entot',
+      'kontol',
+      'memek',
+      'goblok',
+      'goblog',
+      'tolol',
+      'bego',
+      'bodoh',
+      'idiot',
+      'fuck',
+      'fucking',
+      'shit',
+      'bitch',
+      'bastard',
     ],
   };
 
+  static const _noSuffix = {'sayang', 'anjing', 'babi', 'setan', 'tai', 'asu'};
+
   static final _patterns = {
     for (final e in _lexicon.entries)
-      e.key: RegExp(r'\b(' + e.value.map(RegExp.escape).join('|') + r')\b'),
+      // Indonesian suffixes stay part of the word: "buka bajunya", "rumahmu", "pegangku". Not for
+      // words where a suffix changes the meaning ("sayangnya" is "unfortunately").
+      e.key: RegExp(
+        r'\b(?:(?:' +
+            e.value
+                .where((w) => !_noSuffix.contains(w))
+                .map(RegExp.escape)
+                .join('|') +
+            r')(?:nya|mu|ku)?' +
+            [
+              for (final w in e.value.where(_noSuffix.contains))
+                '|${RegExp.escape(w)}',
+            ].join() +
+            r')\b',
+      ),
   };
 
   @override

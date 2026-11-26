@@ -63,4 +63,16 @@ void main() {
     expect(await store.rides(), isEmpty);
     expect(Directory('${root.path}/GR-1').existsSync(), isFalse);
   });
+
+  test('the safe phrase is kept sealed and read back', () async {
+    expect(await store.safePhrase(), isNull);
+    await store.setSafePhrase('Pak, nanti lewat jalan biasa aja ya');
+    expect(await store.safePhrase(), 'Pak, nanti lewat jalan biasa aja ya');
+    expect(
+      File('${root.path}/safe_phrase.enc').readAsStringSync(),
+      isNot(contains('lewat')),
+      reason: 'never in plain text',
+    );
+    expect(await store.rides(), isEmpty, reason: 'not mistaken for a ride');
+  });
 }

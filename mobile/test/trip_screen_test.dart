@@ -500,4 +500,55 @@ void main() {
     expect(find.text(SafetyText.noRideWaiting), findsOneWidget);
     expect(h.recorder.state, 'idle');
   });
+
+  testWidgets(
+    'each person sets their own safe phrase; the ride listens for it',
+    (tester) async {
+      final h = Harness();
+      await h.pump(tester);
+      await tester.tap(find.text('Change'));
+      await tester.pumpAndSettle();
+      await tester.enterText(
+        find.byType(TextField),
+        'Mas, AC-nya dingin banget ya',
+      );
+      await tester.tap(find.text('Save'));
+      await tester.pumpAndSettle();
+      expect(await h.store.safePhrase(), 'Mas, AC-nya dingin banget ya');
+      expect(find.text(SafetyText.safePhraseSaved), findsOneWidget);
+
+      await h.startRide(tester);
+      await h.say(tester, 'Pak, nanti lewat jalan biasa aja ya.');
+      expect(h.api.reports, isEmpty, reason: 'the old phrase no longer counts');
+      await h.say(
+        tester,
+        'mas ac nya dingin banget ya',
+      ); // as speech-to-text writes it
+      expect(h.api.reports.map((r) => r.$1), ['sos']);
+    },
+  );
+
+  testWidgets('a too-short safe phrase is refused', (tester) async {
+    final h = Harness();
+    await h.pump(tester);
+    await tester.tap(find.text('Change'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField), 'tolong');
+    await tester.tap(find.text('Save'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('at least 4 words'), findsOneWidget);
+    expect(await h.store.safePhrase(), isNull);
+  });
+
+  testWidgets('a saved phrase is loaded at start, for the driver too', (
+    tester,
+  ) async {
+    final h = Harness();
+    await h.store.setSafePhrase('Bang, helmnya kebesaran nih kayaknya');
+    await h.pump(tester);
+    await tester.pump();
+    await tester.tap(find.text('Driver'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('helmnya kebesaran'), findsOneWidget);
+  });
 }
