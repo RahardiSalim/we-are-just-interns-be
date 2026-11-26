@@ -31,10 +31,11 @@ def classify(lines: list[dict]) -> tuple[list[dict], str, float]:
     out = []
     for line in lines:
         text = line["text"].lower()
-        matched = [label for label, rx in PATTERNS.items() if rx.search(text)]
-        for label in matched:
-            hits[label] = hits.get(label, 0) + 1
-        out.append({**line, "flagged": bool(matched)})
+        counts = {label: len(rx.findall(text)) for label, rx in PATTERNS.items()}
+        for label, n in counts.items():
+            if n:  # phrases, not lines: two in one sentence is stronger
+                hits[label] = hits.get(label, 0) + n
+        out.append({**line, "flagged": any(counts.values())})
     label = next((lbl for lbl in LEXICON if lbl in hits), "normal")
     score = min(0.95, 0.5 + 0.15 * hits[label]) if label in hits else 0.5
     return out, label, score

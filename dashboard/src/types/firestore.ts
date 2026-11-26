@@ -26,7 +26,7 @@ export interface Incident {
   id: string;
   tripId: string;
   reportedBy: string;
-  trigger: "sos" | "manual_unsafe";
+  trigger: "sos" | "manual_unsafe" | "auto";
   status: IncidentStatus;
   severity: Severity | null;
   label: Label | null;

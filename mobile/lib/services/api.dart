@@ -1,26 +1,83 @@
+import 'dart:convert';
+
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
+
+import '../engine/safety_engine.dart';
+
+class ApiException implements Exception {
+  ApiException(this.status, this.body);
+  final int status;
+  final String body;
+  @override
+  String toString() => 'API $status: $body';
+}
 
 /// FastAPI client. Every write goes through here, never to Firestore directly.
 class Api {
-  Api({String? baseUrl})
-    // 10.0.2.2 is the host machine as seen from the Android emulator.
-    : baseUrl =
-          baseUrl ??
-          const String.fromEnvironment(
-            'API_URL',
-            defaultValue: 'http://10.0.2.2:8000',
-          );
+  Api({required this.token, String? baseUrl, http.Client? client})
+      : baseUrl = baseUrl ??
+            // 10.0.2.2 is the host machine as seen from the Android emulator.
+            const String.fromEnvironment('API_URL').ifEmpty(kIsWeb ? 'http://127.0.0.1:8000' : 'http://10.0.2.2:8000'),
+        _http = client ?? http.Client();
 
+  /// The signed-in user's Firebase ID token.
+  final Future<String?> Function() token;
   final String baseUrl;
+  final http.Client _http;
 
   Future<bool> health() async {
     try {
-      final res = await http
-          .get(Uri.parse('$baseUrl/health'))
-          .timeout(const Duration(seconds: 5));
+      final res = await _http.get(Uri.parse('$baseUrl/health')).timeout(const Duration(seconds: 5));
       return res.statusCode == 200;
     } catch (_) {
       return false;
     }
   }
+
+  Future<Map<String, dynamic>> _post(String path, [Map<String, Object?>? body]) async {
+    final res = await _http.post(
+      Uri.parse('$baseUrl$path'),
+      headers: {'Authorization': 'Bearer ${await token()}', 'Content-Type': 'application/json'},
+      body: jsonEncode(body ?? {}),
+    );
+    if (res.statusCode >= 300) throw ApiException(res.statusCode, res.body);
+    return jsonDecode(res.body) as Map<String, dynamic>;
+  }
+
+  Future<void> setConsent(bool on) => _post('/me/consent', {'audioConsent': on});
+
+  /// The GoJek order ID becomes the trip ID.
+  Future<String> startTrip(String orderId, String mode) async =>
+      (await _post('/trips', {'orderId': orderId, 'mode': mode}))['tripId'] as String;
+
+  Future<void> endTrip(String tripId) => _post('/trips/$tripId/end');
+
+  /// trigger: sos | manual_unsafe | auto. Sends the phone's transcript window and verdict.
+  Future<String> report(String tripId, String trigger, Decision? evidence) async {
+    final now = DateTime.now().toUtc();
+    final windowSec = evidence == null || evidence.window.isEmpty ? 30.0 : evidence.window.last.end;
+    final created = await _post('/incidents', {
+      'tripId': tripId,
+      'trigger': trigger,
+      'windowStart': now.subtract(Duration(milliseconds: (windowSec * 1000).round())).toIso8601String(),
+      'windowEnd': now.toIso8601String(),
+      if (evidence != null) ...{
+        'deviceTranscript': [for (final l in evidence.window) l.toJson()],
+        'deviceLabel': evidence.verdict.label.api,
+        'deviceScore': evidence.verdict.score,
+      },
+    });
+    final id = created['incidentId'] as String;
+    // shortcut: no audio yet (input is mocked), so nothing goes to uploadUrl before finalize.
+    await _post('/incidents/$id/finalize');
+    return id;
+  }
+
+  Future<void> replyCheckin(String checkinId, bool ok) =>
+      _post('/checkins/$checkinId/reply', {'answer': ok ? 'ok' : 'need_help'});
+}
+
+extension on String {
+  String ifEmpty(String fallback) => isEmpty ? fallback : this;
 }

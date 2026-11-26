@@ -13,14 +13,17 @@ Follow the root [CLAUDE.md](../CLAUDE.md) rules. The design is in [contracts/ARC
 - All writes go to FastAPI. Audio uploads go to the signed URL from the API, using the returned `uploadMethod` (PUT in the cloud, POST on the emulator), then call the matching `/finalize` or `/done`.
 - Config: `google-services.json` (not committed), `--dart-define=API_URL=...`, `DEMO_MODE`.
 - Flutter 3.50+: Material widgets come from `package:material_ui/material_ui.dart`, not `package:flutter/material.dart`.
-- Not built yet: Firebase wiring (login, Firestore, FCM), the listening service, models, encrypted store, warning and "Are you OK?" screens. Today `TripScreen` is mock state. Until the models land, send a canned `deviceTranscript` / `deviceLabel` so the backend flow can be tested.
+- Built: login (Firebase Auth), trip by order ID, consent, the decision engine (`lib/engine/safety_engine.dart`: 30 s window, warning with 10-min cooldown, one automatic report per trip), warning banner, "Are you OK?" (dialog, or a banner for a GoRide driver), SOS / "I feel unsafe", answering backend check-ins (Firestore listener).
+- Mocked: speech input is `lib/services/mock_listener.dart` (a scripted conversation); the classifier is `KeywordClassifier`. Swap in sherpa_onnx (VAD + Whisper) and IndoBERT behind the same interfaces.
+- Not built yet: the microphone foreground service, encrypted 7-day storage and clip upload, FCM, audio requests.
+- Firebase points at the local emulators (`USE_EMULATORS`, default true; `EMULATOR_HOST` defaults to 10.0.2.2 on Android, 127.0.0.1 on web).
 
 Commands (from `mobile/`):
 
 | Task | Command |
 |---|---|
 | Install | `flutter pub get` |
-| Check | `flutter analyze` and `flutter test` |
+| Check | `flutter analyze` and `flutter test` (engine + screen tests, no backend needed) |
 | Run on phone/emulator | `flutter run --dart-define=API_URL=http://10.0.2.2:8000` (emulator) or your tunnel URL |
-| Quick UI preview, no phone | `flutter run -d chrome` (web is for previews only; the product is Android) |
+| Quick UI preview, no phone | `flutter run -d chrome` with the emulators and backend running (web is for previews only; the product is Android). Sign in as `rider1@gosafe.test` |
 | APK | `flutter build apk --dart-define=API_URL=https://...` (needs the Android SDK) |

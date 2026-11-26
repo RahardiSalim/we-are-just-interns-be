@@ -6,6 +6,12 @@ const wib = new Intl.DateTimeFormat("id-ID", {
   timeStyle: "short",
 });
 
+const triggerText: Record<Incident["trigger"], string> = {
+  sos: "SOS",
+  manual_unsafe: "I feel unsafe",
+  auto: "Auto-detected on phone",
+};
+
 const labelText: Record<string, string> = {
   normal: "Normal",
   uncomfortable: "Uncomfortable",
@@ -29,7 +35,7 @@ export function IncidentList({ incidents }: { incidents: Incident[] }) {
             <span className="ml-auto text-neutral-500">{wib.format(i.createdAt.toDate())} WIB</span>
           </div>
           <p className="mt-1 text-sm text-neutral-500">
-            {i.trigger === "sos" ? "SOS" : "I feel unsafe"} · order {i.tripId} · {i.status.replaceAll("_", " ")}
+            {triggerText[i.trigger]} · order {i.tripId} · {i.status.replaceAll("_", " ")}
           </p>
           {i.summary && <p className="mt-2">{i.summary}</p>}
           {i.transcript.some((t) => t.flagged) && (
