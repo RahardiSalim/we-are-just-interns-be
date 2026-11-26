@@ -1,0 +1,53 @@
+{
+  "durationSec": 28.2,
+  "transcript": [
+    {
+      "at": 1.0,
+      "end": 4.8,
+      "text": "Selamat siang Mas, sesuai aplikasi ke Sudirman ya."
+    },
+    {
+      "at": 6.0,
+      "end": 8.8,
+      "text": "Cepetan dong, Pak, saya udah telat."
+    },
+    {
+      "at": 10.0,
+      "end": 13.5,
+      "text": "Iya Mas, ini macet, saya cari jalan lain."
+    },
+    {
+      "at": 14.7,
+      "end": 18.0,
+      "text": "Awas ya, kalau telat saya cari bapak nanti."
+    },
+    {
+      "at": 19.2,
+      "end": 22.2,
+      "text": "Saya tahu rumah bapak, jangan main-main."
+    },
+    {
+      "at": 23.4,
+      "end": 27.0,
+      "text": "Mas, tolong tenang dulu, sebentar lagi sampai."
+    }
+  ],
+  "_note": "Demo ride: macOS 'say' voice Damayanti, one line at a time with pauses, so the times are exact. WAV 16 kHz mono.",
+  "contentType": "audio/wav",
+  "markers": [
+    {
+      "at": 14.7,
+      "kind": "warning",
+      "label": "threat",
+      "score": 0.65,
+      "text": "Awas ya, kalau telat saya cari bapak nanti."
+    },
+    {
+      "at": 19.2,
+      "kind": "high",
+      "label": "threat",
+      "score": 0.91,
+      "text": "Saya tahu rumah bapak, jangan main-main."
+    }
+  ]
+}

@@ -2,7 +2,8 @@
 
 Look: contracts/DESIGN.md (Gojek Asphalt + Brand Book 2019), the same tokens as the dashboard, inlined because
 mail apps ignore stylesheets. Copy: DESIGN.md "Writing": clear and empathetic, never witty; rider emails never
-blame or name the driver; the agent's note is never sent."""
+blame or name the driver. The agent's note for each person is a message from the safety team: with a note the email
+is the short template plus that message; without one it is the full standalone template, so no section is empty."""
 
 from dataclasses import dataclass
 from html import escape
@@ -40,6 +41,9 @@ class Email:
     tone: Tone
     next_steps: tuple[str, ...]
     sign_off: str = "Gojek Safety Team"
+    # Picture under the header, an image in app/assets attached inline: "art-support" (the Gojek support
+    # illustration, for people who reported something) or an Asphalt-style icon tile ("icon-...").
+    art: str = "art-support"
 
     @property
     def emergency(self) -> bool:
@@ -70,9 +74,9 @@ _RIDER_ACTION_TAKEN = Email(
 )
 _DRIVER = {"sign_off": "Gojek Partner Safety Team"}
 
-DECISION_EMAILS: dict[str, tuple[Email, ...]] = {
-    "contact_rider": (
-        Email(
+# The rider always hears the outcome; which email depends on both decisions (see decision_emails).
+RIDER_EMAILS: dict[str, Email] = {
+    "contact": Email(
             "rider",
             "We'd like to check in on you after ride {order}",
             "We're here for you",
@@ -83,10 +87,46 @@ DECISION_EMAILS: dict[str, tuple[Email, ...]] = {
             "success",
             ("Keep your phone nearby. We'll reach out soon.",),
         ),
-    ),
-    "warn_driver": (
-        _RIDER_ACTION_TAKEN,
-        Email(
+    "action": _RIDER_ACTION_TAKEN,
+    "follow_up": Email(
+            "rider",
+            "Update on your report for ride {order}",
+            "We're following up on your ride",
+            (_RIDER_THANKS, "Our safety team is following up with the driver directly. "
+             "To protect everyone's privacy, we can't share the details."),
+            "Reviewed, following up with the driver",
+            "success",
+            _RIDER_NEXT,
+        ),
+    "none": Email(
+            "rider",
+            "Update on your report for ride {order}",
+            "We've reviewed your ride",
+            (_RIDER_THANKS, "We didn't find anything that needs further action this time. "
+             "We take every report seriously, so thank you for speaking up."),
+            "Reviewed, no further action",
+            "neutral",
+            _RIDER_NEXT,
+            art="icon-shield",
+        ),
+}
+
+DRIVER_EMAILS: dict[str, Email] = {
+    "contact": Email(
+            "driver",
+            "Our safety team would like to talk to you about ride {order}",
+            "We'd like to talk to you about a recent ride",
+            ("Our safety team reviewed ride {order} after it was flagged during the trip.",
+             "A member of our team will contact you shortly to hear your side and talk it through. "
+             "This is not a warning or a suspension."),
+            "A safety agent will contact you",
+            "neutral",
+            ("Keep your phone nearby so we can reach you.",
+             "If you can't talk when we call, we'll try again."),
+            art="icon-chat",
+            **_DRIVER,
+        ),
+    "warn": Email(
             "driver",
             "Formal warning about ride {order}",
             "A formal warning about a recent ride",
@@ -98,12 +138,10 @@ DECISION_EMAILS: dict[str, tuple[Email, ...]] = {
             ("Keep every conversation with customers polite and professional.",
              "Another confirmed report may lead to your account being paused.",
              "If you think this is a mistake, contact partner support from the Gojek Driver app."),
+            art="icon-alert",
             **_DRIVER,
         ),
-    ),
-    "suspend_driver": (
-        _RIDER_ACTION_TAKEN,
-        Email(
+    "suspend": Email(
             "driver",
             "Your account is paused while we review ride {order}",
             "Your account is paused",
@@ -115,32 +153,27 @@ DECISION_EMAILS: dict[str, tuple[Email, ...]] = {
             ("You don't need to do anything right now.",
              "We'll contact you as soon as the review is finished.",
              "If you think this is a mistake, contact partner support from the Gojek Driver app."),
+            art="icon-lock",
             **_DRIVER,
         ),
-    ),
-    "dismiss": (
-        Email(
-            "rider",
-            "Update on your report for ride {order}",
-            "We've reviewed your ride",
-            (_RIDER_THANKS, "We didn't find anything that needs further action this time. "
-             "We take every report seriously, so thank you for speaking up."),
-            "Reviewed, no further action",
-            "neutral",
-            _RIDER_NEXT,
-        ),
-    ),
 }
 
 
-# Sent right after someone presses SOS and the ticket is created (before any agent has looked at it).
+def decision_emails(customer: str, driver: str) -> tuple[Email, ...]:
+    """The rider's email (contacting them wins, then action on the driver, then a follow-up, else no action),
+    plus the driver's email when the driver decision is anything but "none"."""
+    outcome = ("contact" if customer == "contact" else "action" if driver in ("warn", "suspend")
+               else "follow_up" if driver == "contact" else "none")
+    return (RIDER_EMAILS[outcome], *((DRIVER_EMAILS[driver],) if driver in DRIVER_EMAILS else ()))
+
+
 # Sent right after someone presses SOS and the ticket is created, before any agent has looked at it.
 # SOS reports can be about sexual violence, so the copy is trauma-informed: the subject says nothing about
 # what happened (emails show up on lock screens), no blame, the reporter decides how much to share,
 # and it points to free support outside Gojek. It promises nothing the system doesn't do.
 SOS_RECEIVED = Email(
     "reporter",
-    "We've received your safety report (ticket #{ticket})",
+    "We've received your safety report (ticket {ticket})",
     "We've received your report, and we're on it",
     ("Thank you for reaching out. You did the right thing by pressing SOS. We've opened a priority safety ticket "
      "for ride {order}, and our safety team is reviewing it now.",
@@ -161,15 +194,29 @@ def subject(e: Email, order: str, ticket: str) -> str:
     return e.subject.format(order=order, ticket=ticket)
 
 
-def details(order: str, ride_time: str, case_id: str) -> list[tuple[str, str]]:
-    return [("Ticket number", f"#{case_id}"), ("Order ID", order), ("Ride", ride_time)]
+def ticket_number(incident_id: str) -> str:
+    """What agents and customers read out on the phone: GS-XXXX-XXXX from the incident ID (dashboard: labels.ts)."""
+    code = "".join(c for c in incident_id if c.isalnum()).upper()
+    return f"GS-{code[:4]}-{code[4:8]}"
 
 
-def text(e: Email, name: str, order: str, ride_time: str, case_id: str) -> str:
+def details(order: str, ride_time: str, ticket: str) -> list[tuple[str, str]]:
+    return [("Ticket number", ticket), ("Order ID", order), ("Ride", ride_time)]
+
+
+def _body(e: Email, order: str, note: str) -> list[str]:
+    """Without a note: the full template. With one: its opening line; the note follows as the team's message."""
+    return [p.format(order=order) for p in (e.paragraphs[:1] if note.strip() else e.paragraphs)]
+
+
+MESSAGE_TITLE = "A message from the safety team who reviewed your ride"
+
+
+def text(e: Email, name: str, order: str, ride_time: str, ticket: str, note: str = "") -> str:
     """Plain-text version, for mail apps that don't show HTML."""
-    rows = "\n".join(f"{k}: {v}" for k, v in [("Outcome", e.outcome), *details(order, ride_time, case_id)])
+    rows = "\n".join(f"{k}: {v}" for k, v in [("Outcome", e.outcome), *details(order, ride_time, ticket)])
     steps = "\n".join(f"{i}. {s}" for i, s in enumerate(e.next_steps, 1))
-    body = "\n\n".join(p.format(order=order) for p in e.paragraphs)
+    body = "\n\n".join(_body(e, order, note)) + (f"\n\n{MESSAGE_TITLE}:\n{note.strip()}" if note.strip() else "")
     sos = f"\n\n{EMERGENCY}" if e.emergency else ""
     return (f"Hi {name},\n\n{e.headline}\n\n{body}\n\n{rows}\n\nWhat happens next\n{steps}{sos}\n\n"
             f"Kind regards,\n{e.sign_off}\n\n--\nGoSafe, ride safety for GoRide and GoCar\n{FOOTER}"
@@ -180,87 +227,119 @@ def _p(content: str, size: int, line: int, color: str = INK, weight: int = 400, 
     return f'<p style="margin:{margin};{FONT}font-size:{size}px;line-height:{line}px;font-weight:{weight};color:{color};">{content}</p>'
 
 
-def html(e: Email, name: str, order: str, ride_time: str, case_id: str) -> str:
-    """Table layout with inline styles: the only kind Gmail and Outlook render reliably. Spacing on the 4px grid."""
-    bg, fg, edge = TONES[e.tone]
-    badge = (f'<span style="display:inline-block;background:{bg};color:{fg};border:1px solid {edge};border-radius:8px;'
-             f'padding:4px 12px;{FONT}font-size:14px;line-height:20px;font-weight:600;">{escape(e.outcome)}</span>')
-    paras = "".join(_p(escape(p.format(order=order)), 16, 24, margin="0 0 16px") for p in e.paragraphs)
-    rows = "".join(
-        f'<tr><td style="padding:4px 0;{FONT}font-size:14px;line-height:20px;color:{MUTED};width:132px;vertical-align:top;">{escape(k)}</td>'
-        f'<td style="padding:4px 0;{FONT}font-size:14px;line-height:20px;font-weight:600;color:{INK};">{escape(v)}</td></tr>'
-        for k, v in details(order, ride_time, case_id)
+def html(e: Email, name: str, order: str, ride_time: str, ticket: str, note: str = "") -> str:
+    """Table layout with inline styles: the only kind Gmail and Outlook render reliably. 600px, 4px grid.
+    Green header with a curved bottom like the dashboard; dark header for a warning or a suspension."""
+    hero = INK if e.tone in ("warn", "high") else BRAND_STRONG
+    dot = {"success": BRAND, "neutral": MUTED, "warn": WARN, "high": HIGH}[e.tone]
+    table = 'role="presentation" width="100%" cellpadding="0" cellspacing="0"'
+
+    paras = "".join(_p(escape(p), 16, 26, margin="0 0 16px") for p in _body(e, order, note))
+    quote = ""
+    if note.strip():
+        message = escape(note.strip()).replace("\n", "<br>")
+        quote = (
+            f'<table {table} style="margin:4px 0 24px;background:{SURFACE};border-radius:12px;"><tr>'
+            f'<td style="width:4px;background:{BRAND};border-radius:12px 0 0 12px;"></td>'
+            f'<td style="padding:16px 20px;">'
+            f'{_p(escape(MESSAGE_TITLE), 13, 18, BRAND_DEEP, 700, "0 0 8px")}'
+            f'<p style="margin:0;{FONT}font-size:16px;line-height:26px;color:{INK};">'
+            f'<span style="color:{BRAND};font-size:24px;line-height:16px;font-weight:700;">&ldquo;</span>{message}</p>'
+            f"</td></tr></table>"
+        )
+
+    summary = "".join(
+        f'<td width="33%" style="padding:14px 16px;vertical-align:top;{"border-left:1px solid " + LINE + ";" if i else ""}">'
+        f'{_p(escape(k), 12, 16, MUTED, margin="0 0 4px")}{_p(escape(v), 15, 20, INK, 700)}</td>'
+        for i, (k, v) in enumerate(details(order, ride_time, ticket))
     )
+
     steps = "".join(
-        f'<tr><td style="width:36px;vertical-align:top;padding:0 0 12px;">'
-        f'<div style="width:24px;height:24px;border-radius:999px;background:{BRAND_STRONG};color:{CANVAS};text-align:center;'
-        f'{FONT}font-size:12px;line-height:24px;font-weight:700;">{i}</div></td>'
-        f'<td style="vertical-align:top;padding:2px 0 12px;{FONT}font-size:16px;line-height:20px;color:{INK};">{escape(s)}</td></tr>'
+        f'<tr><td style="width:40px;vertical-align:top;padding:0 0 14px;">'
+        f'<div style="width:28px;height:28px;border-radius:999px;background:{BRAND_TINT};color:{BRAND_DEEP};text-align:center;'
+        f'{FONT}font-size:13px;line-height:28px;font-weight:700;">{i}</div></td>'
+        f'<td style="vertical-align:top;padding:4px 0 14px;{FONT}font-size:15px;line-height:22px;color:{INK};">{escape(s)}</td></tr>'
         for i, s in enumerate(e.next_steps, 1)
     )
-    sos = (
-        f'<tr><td style="padding:0 32px 24px;"><table role="presentation" width="100%" cellpadding="0" cellspacing="0" '
-        f'style="background:{SOS_TINT};border-radius:12px;"><tr>'
-        f'<td style="width:4px;background:{SOS};border-radius:12px 0 0 12px;"></td>'
-        f'<td style="padding:12px 16px;">{_p(f"<strong>Need help now?</strong> {escape(EMERGENCY)}", 14, 20)}</td>'
-        f'</tr></table></td></tr>'
+
+    picture = (
+        f'<img src="cid:{e.art}" width="536" alt="" style="display:block;width:100%;max-width:536px;height:auto;border:0;margin:0 0 20px;">'
+        if e.art.startswith("art-") else
+        f'<img src="cid:{e.art}" width="80" height="80" alt="" style="display:block;border:0;margin:-8px 0 8px -12px;">'
+    )
+
+    help_cards = (
+        f'<tr><td style="padding:8px 32px 8px;"><table {table}><tr>'
+        f'<td width="50%" style="padding:16px;background:{SOS_TINT};border-radius:12px;vertical-align:top;">'
+        f'{_p("Need help now?", 14, 20, SOS, 700, "0 0 4px")}{_p(escape(EMERGENCY), 14, 20)}</td>'
+        f'<td style="width:12px;"></td>'
+        f'<td width="50%" style="padding:16px;background:{SURFACE};border-radius:12px;vertical-align:top;">'
+        f'{_p("Something else happened?", 14, 20, INK, 700, "0 0 4px")}{_p("Report it from the Gojek app any time.", 14, 20)}</td>'
+        f"</tr></table></td></tr>"
         if e.emergency else ""
     )
+
     return f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="color-scheme" content="light only"><meta name="supported-color-schemes" content="light">
 <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700&display=swap" rel="stylesheet">
-<title>{escape(subject(e, order, case_id))}</title></head>
+<title>{escape(subject(e, order, ticket))}</title></head>
 <body style="margin:0;padding:0;background:{SURFACE};">
-<div style="display:none;max-height:0;overflow:hidden;">{escape(e.headline)}. {escape(e.outcome)}.</div>
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background:{SURFACE};">
-<tr><td align="center" style="padding:32px 16px;">
-<table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="max-width:560px;">
+<div style="display:none;max-height:0;overflow:hidden;">{escape(e.headline)}. {escape(e.outcome)}. Ticket {escape(ticket)}.</div>
+<table {table} style="background:{SURFACE};">
+<tr><td align="center" style="padding:32px 12px;">
+<table {table} style="max-width:600px;background:{CANVAS};border:1px solid {LINE};border-radius:16px;overflow:hidden;">
 
-  <tr><td style="padding:0 8px 16px;">
-    <table role="presentation" cellpadding="0" cellspacing="0"><tr>
-      <td style="vertical-align:middle;padding-right:8px;"><img src="cid:{LOGO_CID}" width="32" height="32" alt="" style="display:block;border:0;"></td>
-      <td style="vertical-align:middle;{FONT}font-size:20px;line-height:28px;font-weight:700;color:{INK};">GoSafe</td>
-      <td style="vertical-align:middle;padding-left:8px;{FONT}font-size:14px;line-height:20px;color:{MUTED};">by Gojek</td>
+  <tr><td style="background:{hero};padding:24px 32px 28px;">
+    <table {table}><tr>
+      <td style="vertical-align:middle;">
+        <table role="presentation" cellpadding="0" cellspacing="0"><tr>
+          <td style="width:36px;height:36px;background:{CANVAS};border-radius:999px;text-align:center;vertical-align:middle;">
+            <img src="cid:{LOGO_CID}" width="22" height="22" alt="" style="display:inline-block;border:0;vertical-align:middle;"></td>
+          <td style="padding-left:10px;vertical-align:middle;{FONT}font-size:18px;line-height:24px;font-weight:700;color:{CANVAS};">GoSafe
+            <span style="font-size:13px;font-weight:400;">&nbsp;by Gojek</span></td>
+        </tr></table>
+      </td>
+      <td align="right" style="vertical-align:middle;">
+        <span style="display:inline-block;border:1px solid {CANVAS};border-radius:999px;padding:4px 12px;{FONT}font-size:12px;line-height:16px;font-weight:600;color:{CANVAS};">{escape(ticket)}</span>
+      </td>
     </tr></table>
+    {_p(f"Hi {escape(name)},", 16, 24, CANVAS, margin="28px 0 4px")}
+    <h1 style="margin:0 0 16px;{FONT}font-size:28px;line-height:36px;font-weight:700;color:{CANVAS};">{escape(e.headline)}</h1>
+    <span style="display:inline-block;background:{CANVAS};border-radius:999px;padding:6px 14px 6px 12px;{FONT}font-size:13px;line-height:18px;font-weight:700;color:{INK};">
+      <span style="display:inline-block;width:8px;height:8px;border-radius:999px;background:{dot};margin-right:6px;"></span>{escape(e.outcome)}</span>
+  </td></tr>
+  <tr><td style="background:{hero};font-size:0;line-height:0;">
+    <div style="height:24px;background:{CANVAS};border-radius:24px 24px 0 0;">&nbsp;</div>
   </td></tr>
 
-  <tr><td style="background:{CANVAS};border:1px solid {LINE};border-radius:16px;overflow:hidden;">
-    <table role="presentation" width="100%" cellpadding="0" cellspacing="0">
-      <tr><td style="height:4px;background:{BRAND};font-size:0;line-height:0;">&nbsp;</td></tr>
-      <tr><td style="padding:32px 32px 8px;">
-        {_p(f"Hi {escape(name)},", 16, 24, MUTED, margin="0 0 8px")}
-        <h1 style="margin:0 0 16px;{FONT}font-size:26px;line-height:36px;font-weight:700;color:{INK};">{escape(e.headline)}</h1>
-        <div style="margin:0 0 24px;">{badge}</div>
-        {paras}
-      </td></tr>
-
-      <tr><td style="padding:0 32px 24px;">
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="border:1px solid {LINE};border-radius:12px;">
-          <tr><td style="padding:20px;">
-            {_p("Ticket details", 16, 20, weight=600, margin="0 0 12px")}
-            <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{rows}</table>
-          </td></tr>
-        </table>
-      </td></tr>
-
-      <tr><td style="padding:0 32px 12px;">
-        {_p("What happens next", 20, 28, weight=600, margin="0 0 16px")}
-        <table role="presentation" width="100%" cellpadding="0" cellspacing="0">{steps}</table>
-      </td></tr>
-      {sos}
-      <tr><td style="padding:0 32px 32px;">
-        {_p(f"Kind regards,<br><strong>{escape(e.sign_off)}</strong>", 16, 24)}
-      </td></tr>
-    </table>
+  <tr><td style="padding:4px 32px 0;">
+    {picture}
+    {paras}
+    {quote}
+    <table {table} style="margin:0 0 28px;background:{SURFACE};border-radius:12px;"><tr>{summary}</tr></table>
   </td></tr>
 
-  <tr><td style="padding:24px 8px 0;">
-    {_p(f'<strong style="color:{BRAND_DEEP};">GoSafe</strong> &middot; ride safety for GoRide and GoCar', 12, 16, MUTED, margin="0 0 4px")}
-    {_p(escape(FOOTER), 12, 16, MUTED)}
-    {_p(escape(CONFIDENTIAL), 12, 16, MUTED, margin="4px 0 0") if e.confidential else ""}
+  <tr><td style="padding:0 32px 8px;">
+    {_p("What happens next", 18, 24, INK, 700, "0 0 16px")}
+    <table {table}>{steps}</table>
+  </td></tr>
+  {help_cards}
+  <tr><td style="padding:20px 32px 32px;">
+    {_p("Kind regards,", 15, 22, MUTED)}
+    {_p(escape(e.sign_off), 16, 24, INK, 700)}
   </td></tr>
 
 </table>
+
+<table {table} style="max-width:600px;">
+  <tr><td align="center" style="padding:24px 24px 0;">
+    <img src="cid:{LOGO_CID}" width="20" height="20" alt="" style="display:block;border:0;margin:0 auto 8px;">
+    {_p(f'<strong style="color:{BRAND_DEEP};">GoSafe</strong> &middot; Ride safety for GoRide and GoCar', 12, 18, MUTED, margin="0 0 4px")}
+    {_p(escape(FOOTER), 12, 18, MUTED)}
+    {_p(escape(CONFIDENTIAL), 12, 18, MUTED, margin="4px 0 0") if e.confidential else ""}
+  </td></tr>
+</table>
+
 </td></tr></table>
 </body></html>"""

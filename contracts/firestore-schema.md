@@ -8,6 +8,7 @@ Data truth for all three apps. Only the backend writes; clients read. Audio live
 |---|---|
 | `role` | `rider` \| `driver` \| `agent` (also set as a custom claim) |
 | `displayName` | string |
+| `phone` | string, the phone number on the Gojek account (riders and drivers). Agents see it on the case page to call them. Demo seed: fake numbers |
 | `fcmToken` | string |
 | `audioConsent` | bool |
 | `safeRideBadge` | bool |
@@ -75,7 +76,7 @@ Read by: agents.
 | `clipPath` | object storage key of the reporter's clip, if any |
 | `source` | `device` \| `cloud` |
 | `assignedAgent` | uid |
-| `decision` | `{ action: dismiss \| warn_driver \| suspend_driver \| contact_rider, note, agentId, ts }` |
+| `decision` | `{ customer: contact \| none, driver: contact \| warn \| suspend \| none, customerNote, driverNote, agentId, ts }`. Each note is the safety team's message in that person's email |
 | `createdAt`, `deleteAt` | timestamp |
 | `error` | string, only when `status` is `failed` |
 

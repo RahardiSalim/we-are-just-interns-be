@@ -1,6 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
 import ride from "../../../contracts/fixtures/demo-ride.json";
-import type { Incident, Marker, Trip } from "@/types/firestore";
+import type { Incident, Marker, Person, Trip } from "@/types/firestore";
 
 // shortcut: no Firebase config means mock mode (no login, fake data); set NEXT_PUBLIC_FIREBASE_API_KEY to go live.
 export const MOCK = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -12,8 +12,8 @@ const deleteAt = at("2026-12-03T12:00:00Z");
 // Same story as backend/app/services/seed.py, plus two more cases to fill the queue.
 export const mockIncidents: Incident[] = [
   {
-    id: "demo-incident-1",
-    tripId: "GR-DEMO-1",
+    id: "K7QM2XRAp9LbT3vWc8Ne",
+    tripId: "RB-182730459",
     reportedBy: "rider1",
     trigger: "auto",
     status: "escalated",
@@ -24,7 +24,7 @@ export const mockIncidents: Incident[] = [
     transcript: ride.transcript
       .filter((l) => l.at <= 22)
       .map((l) => ({ start: +(l.at - 1).toFixed(1), end: +(l.end - 1).toFixed(1), text: l.text, flagged: [9.8, 18.2, 22].includes(l.at) })),
-    summary: "Pemicu: deteksi otomatis di ponsel pada trip GR-DEMO-1. Penilaian otomatis: sexual_harassment (80%).",
+    summary: "Pemicu: deteksi otomatis di ponsel pada trip RB-182730459. Penilaian otomatis: sexual_harassment (80%).",
     clipPath: null,
     source: "device",
     assignedAgent: null,
@@ -32,8 +32,8 @@ export const mockIncidents: Incident[] = [
     deleteAt,
   },
   {
-    id: "demo-incident-2",
-    tripId: "GR-DEMO-2",
+    id: "B4NZ8HTYq2MdR6sJw1Kf",
+    tripId: "RB-182731106",
     reportedBy: "rider2",
     trigger: "manual_unsafe",
     status: "under_review",
@@ -54,8 +54,8 @@ export const mockIncidents: Incident[] = [
     deleteAt,
   },
   {
-    id: "demo-incident-3",
-    tripId: "GR-DEMO-3",
+    id: "P2LW5CVEx7GhN9tQa3Ub",
+    tripId: "RB-182733872",
     reportedBy: "rider1",
     trigger: "sos",
     status: "escalated",
@@ -76,10 +76,10 @@ export const mockIncidents: Incident[] = [
   },
 ];
 
-// The demo ride the backend seeds too: same audio (public/demo-ride.m4a) and timings.
+// The demo ride the backend seeds too: same audio (public/demo-ride.wav) and timings.
 export const mockTrips: Record<string, Trip> = {
-  "GR-DEMO-1": {
-    id: "GR-DEMO-1",
+  "RB-182730459": {
+    id: "RB-182730459",
     riderId: "rider1",
     driverId: "driver1",
     mode: "goride",
@@ -107,4 +107,12 @@ export const mockTrips: Record<string, Trip> = {
       },
     } },
   },
+};
+
+/** Same names and fake numbers as the backend seed. */
+export const mockPeople: Record<string, Person> = {
+  rider1: { displayName: "Rina (rider)", phone: "+62 812-0000-0101" },
+  rider2: { displayName: "Bayu (rider)", phone: "+62 812-0000-0102" },
+  driver1: { displayName: "Dodi (driver)", phone: "+62 813-0000-0201" },
+  driver2: { displayName: "Sari (driver)", phone: "+62 813-0000-0202" },
 };

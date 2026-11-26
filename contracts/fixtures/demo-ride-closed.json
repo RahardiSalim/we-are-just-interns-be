@@ -1,0 +1,55 @@
+{
+  "durationSec": 21.6,
+  "transcript": [
+    {
+      "at": 1.0,
+      "end": 3.9,
+      "text": "Pak, sesuai aplikasi ya, ke Blok M."
+    },
+    {
+      "at": 5.1,
+      "end": 8.7,
+      "text": "Siap Mbak. Cantik banget, boleh minta nomornya?"
+    },
+    {
+      "at": 9.9,
+      "end": 11.2,
+      "text": "Nggak usah, Pak."
+    },
+    {
+      "at": 12.4,
+      "end": 16.1,
+      "text": "Ayo dong, nomornya berapa? Nanti saya jemput."
+    },
+    {
+      "at": 17.3,
+      "end": 20.4,
+      "text": "Tolong berhenti, Pak, saya turun di sini!"
+    }
+  ],
+  "_note": "Demo ride: macOS 'say' voice Damayanti, one line at a time with pauses, so the times are exact. WAV 16 kHz mono.",
+  "contentType": "audio/wav",
+  "markers": [
+    {
+      "at": 5.1,
+      "kind": "warning",
+      "label": "uncomfortable",
+      "score": 0.65,
+      "text": "Siap Mbak. Cantik banget, boleh minta nomornya?"
+    },
+    {
+      "at": 12.4,
+      "kind": "high",
+      "label": "sexual_harassment",
+      "score": 0.82,
+      "text": "Ayo dong, nomornya berapa? Nanti saya jemput."
+    },
+    {
+      "at": 17.3,
+      "kind": "sos",
+      "label": null,
+      "score": null,
+      "text": "Tolong berhenti, Pak, saya turun di sini!"
+    }
+  ]
+}

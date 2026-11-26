@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { IncidentList } from "@/components/IncidentList";
+import { PageHero } from "@/components/PageHero";
 import { MOCK, mockIncidents } from "@/lib/mock";
 
 // Loaded only in live mode, so Firebase never initialises without config.
@@ -11,14 +12,15 @@ export default function Home() {
   if (!MOCK) return <LiveHome />;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-8">
-      <header className="mb-6 flex items-center gap-4">
-        <h1 className="text-title-medium font-bold">Open cases</h1>
-        <span className="ml-auto rounded-chip bg-surface px-2 py-0.5 text-body-small text-muted">
-          Mock data
-        </span>
-      </header>
-      <IncidentList incidents={mockIncidents} />
+    <main>
+      <PageHero
+        title="Open cases"
+        sub="Highest priority first. Opening a case assigns it to you."
+        aside={<span className="rounded-full bg-canvas px-2.5 py-0.5 text-caption font-semibold text-fg">Mock data</span>}
+      />
+      <div className="mx-auto -mt-12 w-full max-w-3xl px-6 pb-8">
+        <IncidentList incidents={mockIncidents} />
+      </div>
     </main>
   );
 }

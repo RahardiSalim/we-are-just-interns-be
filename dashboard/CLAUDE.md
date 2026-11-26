@@ -4,7 +4,7 @@ Next.js agent dashboard on Vercel. Agents see the escalated-incident queue live,
 
 Follow the root [CLAUDE.md](../CLAUDE.md) rules and [contracts/ARCHITECTURE.md](../contracts/ARCHITECTURE.md).
 
-- Stack: Next.js (App Router), TypeScript, Tailwind, shadcn/ui, Firebase JS SDK (Auth + Firestore reads only), wavesurfer.js. No map: we store no location; show the GoJek order ID so agents can look the trip up there.
+- Stack: Next.js (App Router), TypeScript, Tailwind, shadcn/ui, Firebase JS SDK (Auth + Firestore reads only). The recording waveform is drawn with the browser's Web Audio API (no audio library). No map: we store no location; show the GoJek order ID so agents can look the trip up there.
 - Layout: `src/app/` routes, `src/components/`, `src/lib/firebase.ts`, `src/lib/api.ts` (all writes go to FastAPI), `src/types/api.d.ts` (generated from `contracts/openapi.json`).
 - No ML, no secrets, no Firestore writes here. Clip audio only via `GET /incidents/{id}/clip-url`.
 - Show times in WIB.
@@ -13,8 +13,10 @@ Follow the root [CLAUDE.md](../CLAUDE.md) rules and [contracts/ARCHITECTURE.md](
 - Read `AGENTS.md` first: this Next.js version differs from older docs; the bundled guides are in `node_modules/next/dist/docs/`.
 - Firestore types live in `src/types/firestore.ts` and mirror `contracts/firestore-schema.md`.
 - Pages: `/` the queue (high priority first), `/incidents/[id]` the case page (`CaseView`, described in ARCHITECTURE.md "Agent case page"). Live data in `LiveCase`, mock data in `CaseClient`; `useAgent` is the shared agent sign-in.
-- Mock mode reads `contracts/fixtures/demo-ride.json` (same as the backend seed) and plays `public/demo-ride.m4a`. `next.config.ts` sets `turbopack.root` to the repo so that import works.
-- Labels, colours per flag kind and time formats live in `src/lib/labels.ts`; reuse them.
+- Mock mode reads `contracts/fixtures/demo-ride.json` (same as the backend seed) and plays `public/demo-ride.wav` (WAV so editor preview browsers without AAC can play it). `next.config.ts` sets `turbopack.root` to the repo so that import works.
+- Labels, colours per flag kind (`dot`, `chip`, `line`), status names and time formats live in `src/lib/labels.ts`; reuse them.
+- Ticket number (`ticketNo`, must match the backend's `email_content.ticket_number`) and priority (`priorityOf`: SOS and auto are high, "I feel unsafe" is a warning) live in `labels.ts`. The queue loads open and closed cases and filters in the browser.
+- Shared pieces: `PageHero` (green header), `StatusPill`, `RecordingPlayer` (waveform), the side nav in `app/layout.tsx`. The case page splits the case's `reports` (one case per ride, from either phone) into the rider's and the driver's phone cards, with each person's name and phone number from `users`.
 - Style: only the design tokens in `src/app/globals.css` (from [contracts/DESIGN.md](../contracts/DESIGN.md)): `bg-canvas`, `bg-surface`, `border-line`, `text-fg`, `text-muted`, `bg-brand-strong`, `bg-high` and friends, `text-title-*` / `text-body-*` / `text-caption`, `rounded-chip|card|sheet`, `shadow-low|high`. No raw Tailwind colours.
 
 Commands (from `dashboard/`): `npm run dev`, `npm run build`, `npm run lint`. Deploy: push to `main` (Vercel, Root Directory `dashboard`).

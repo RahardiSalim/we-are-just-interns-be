@@ -15,13 +15,30 @@ async function call<T>(method: "GET" | "POST", path: string, body?: unknown): Pr
   return res.json() as Promise<T>;
 }
 
-export type DecisionAction = "dismiss" | "warn_driver" | "suspend_driver" | "contact_rider";
+/** One decision for the customer and one for the driver; each note is the safety team's message in that person's email. */
+/**
+ * shortcut: emulator only. scripts/demo.sh signs storage links with the laptop's Wi-Fi IP so a phone can reach them;
+ * some browsers on the laptop itself can't open that IP, so use the page's own host for the emulator (port 9199).
+ * Real signed URLs (R2 / Cloud Storage) are left alone.
+ */
+const sameHost = (url: string) =>
+  process.env.NEXT_PUBLIC_USE_EMULATORS === "true" ? url.replace(/^http:\/\/[^/:]+:9199\//, `http://${location.hostname}:9199/`) : url;
+
+export type Decision = {
+  customer: "contact" | "none";
+  driver: "contact" | "warn" | "suspend" | "none";
+  customerNote: string;
+  driverNote: string;
+};
 
 export const api = {
   /** Takes an escalated case: status under_review, assigned to this agent. */
   openCase: (id: string) => call("POST", `/incidents/${id}/open`),
-  decide: (id: string, action: DecisionAction, note: string) => call("POST", `/incidents/${id}/decision`, { action, note }),
+  decide: (id: string, decision: Decision) => call("POST", `/incidents/${id}/decision`, decision),
   /** Short-lived signed URLs for every audio piece, per phone. The backend logs every call. */
   recordingUrls: (tripId: string) =>
-    call<Partial<Record<Phone, { contentType: string; urls: string[] }>>>("GET", `/trips/${tripId}/recording-urls`),
+    call<Partial<Record<Phone, { contentType: string; urls: string[] }>>>("GET", `/trips/${tripId}/recording-urls`).then((r) => {
+      for (const rec of Object.values(r)) if (rec) rec.urls = rec.urls.map(sameHost);
+      return r;
+    }),
 };

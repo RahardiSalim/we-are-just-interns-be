@@ -3,6 +3,7 @@
 import { signOut } from "firebase/auth";
 import { IncidentQueue } from "@/components/IncidentQueue";
 import { LoginForm } from "@/components/LoginForm";
+import { PageHero } from "@/components/PageHero";
 import { auth } from "@/lib/firebase";
 import { useAgent } from "@/lib/useAgent";
 
@@ -13,15 +14,22 @@ export default function LiveHome() {
   if (!user) return <LoginForm key={notice} notice={notice} />;
 
   return (
-    <main className="mx-auto w-full max-w-3xl px-6 py-8">
-      <header className="mb-6 flex items-center gap-4">
-        <h1 className="text-title-medium font-bold">Open cases</h1>
-        <span className="ml-auto text-body-small text-muted">{user.email}</span>
-        <button onClick={() => signOut(auth)} className="text-body-small underline">
-          Sign out
-        </button>
-      </header>
-      <IncidentQueue />
+    <main>
+      <PageHero
+        title="Open cases"
+        sub="Highest priority first. Opening a case assigns it to you."
+        aside={
+          <>
+            <span>{user.email}</span>
+            <button onClick={() => signOut(auth)} className="rounded-full border border-white px-3 py-1 font-semibold hover:bg-white/10">
+              Sign out
+            </button>
+          </>
+        }
+      />
+      <div className="mx-auto -mt-12 w-full max-w-3xl px-6 pb-8">
+        <IncidentQueue />
+      </div>
     </main>
   );
 }

@@ -81,7 +81,7 @@
 }
 
 body {
-  background: var(--canvas);
+  background: var(--surface); /* white cards on light grey, as in Gojek's apps */
   color: var(--fg);
 }
 
@@ -90,8 +90,40 @@ body {
   outline-offset: 2px;
 }
 
+/* The transcript line that just started playing bounces once (CaseView). */
+@keyframes line-pop {
+  0% {
+    transform: scale(1);
+  }
+  40% {
+    transform: scale(1.025);
+  }
+  70% {
+    transform: scale(0.995);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+.animate-line-pop {
+  animation: line-pop 450ms ease-out;
+}
+
+/* The waveform bars at the playhead (RecordingPlayer). */
+@keyframes bar-pulse {
+  50% {
+    transform: scaleY(1.4);
+  }
+}
+.animate-bar {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: bar-pulse 600ms ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+    animation: none !important;
   }
 }

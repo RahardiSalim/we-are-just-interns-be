@@ -2,6 +2,7 @@
 
 import { signInWithEmailAndPassword } from "firebase/auth";
 import { useState } from "react";
+import { PageHero } from "@/components/PageHero";
 import { auth } from "@/lib/firebase";
 
 export function LoginForm({ notice }: { notice?: string }) {
@@ -20,21 +21,24 @@ export function LoginForm({ notice }: { notice?: string }) {
     }
   }
 
+  const input = "h-11 rounded-chip border border-line bg-canvas px-3 font-normal focus:border-brand";
   return (
-    <form action={submit} className="mx-auto mt-24 flex w-full max-w-sm flex-col gap-4 px-6">
-      <h1 className="text-title-medium font-bold">Safety team sign-in</h1>
-      <label className="flex flex-col gap-1 text-body-small">
-        Email
-        <input name="email" type="email" required autoComplete="username" className="h-11 rounded-chip border border-line bg-canvas px-3 focus:border-brand" />
-      </label>
-      <label className="flex flex-col gap-1 text-body-small">
-        Password
-        <input name="password" type="password" required autoComplete="current-password" className="h-11 rounded-chip border border-line bg-canvas px-3 focus:border-brand" />
-      </label>
-      {error && <p role="alert" className="text-body-small text-high">{error}</p>}
-      <button disabled={busy} className="mt-2 h-11 rounded-full bg-brand-strong px-5 text-title-tiny font-semibold text-white hover:bg-brand-deep disabled:opacity-60">
-        {busy ? "Signing in…" : "Sign in"}
-      </button>
-    </form>
+    <main>
+      <PageHero title="Safety team sign-in" sub="Use your GoSafe agent account." width="max-w-md" />
+      <form action={submit} className="mx-auto -mt-12 flex w-[calc(100%-3rem)] max-w-md flex-col gap-4 rounded-card border border-line bg-canvas p-6 shadow-high">
+        <label className="flex flex-col gap-1 text-body-small font-semibold">
+          Email
+          <input name="email" type="email" required autoComplete="username" className={input} />
+        </label>
+        <label className="flex flex-col gap-1 text-body-small font-semibold">
+          Password
+          <input name="password" type="password" required autoComplete="current-password" className={input} />
+        </label>
+        {error && <p role="alert" className="text-body-small text-high">{error}</p>}
+        <button disabled={busy} className="mt-2 h-11 rounded-full bg-brand-strong px-5 text-title-tiny font-semibold text-white hover:bg-brand-deep disabled:opacity-60">
+          {busy ? "Signing in…" : "Sign in"}
+        </button>
+      </form>
+    </main>
   );
 }

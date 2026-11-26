@@ -17,7 +17,12 @@ from app.services import email_content
 
 log = logging.getLogger(__name__)
 WIB = ZoneInfo("Asia/Jakarta")
-LOGO = Path(__file__).parents[1] / "assets" / "gosafe-mark.png"
+ASSETS = Path(__file__).parents[1] / "assets"  # <cid>.png or <cid>.jpg for every inline picture
+
+
+def asset(cid: str) -> Path:
+    """The picture file for an inline image: PNG for icons and the logo, JPEG for the photo-sized illustration."""
+    return next(p for p in (ASSETS / f"{cid}.png", ASSETS / f"{cid}.jpg") if p.exists())
 
 
 def send(to: str, subject: str, text: str, html: str | None = None) -> None:
@@ -30,8 +35,10 @@ def send(to: str, subject: str, text: str, html: str | None = None) -> None:
     msg.set_content(text)
     if html:
         msg.add_alternative(html, subtype="html")
-        if f"cid:{email_content.LOGO_CID}" in html:  # inline, so it shows without loading remote images
-            msg.get_payload()[1].add_related(LOGO.read_bytes(), "image", "png", cid=f"<{email_content.LOGO_CID}>")
+        # Every picture the HTML uses (logo, illustration, icons) goes inline, so it shows without loading remote images.
+        for cid in dict.fromkeys(re.findall(r'src="cid:([\w-]+)"', html)):
+            path = asset(cid)
+            msg.get_payload()[1].add_related(path.read_bytes(), "image", "jpeg" if path.suffix == ".jpg" else "png", cid=f"<{cid}>")
     try:
         with smtplib.SMTP(config.SMTP_HOST, config.SMTP_PORT, timeout=10) as smtp:
             smtp.starttls()
@@ -60,8 +67,9 @@ def wib(ts: datetime | None) -> str:
     return f"{ts.astimezone(WIB):%-d %b %Y, %H.%M} WIB" if ts else "Not recorded"
 
 
-def _send_for_incident(incident_id: str, emails: tuple[email_content.Email, ...]) -> None:
-    """Sends each email to the person it's for (rider, driver or the reporter), filled in from the incident and trip."""
+def _send_for_incident(incident_id: str, emails: tuple[email_content.Email, ...], notes: dict[str, str] | None = None) -> None:
+    """Sends each email to the person it's for (rider, driver or the reporter), filled in from the incident and trip.
+    `notes` maps "rider" / "driver" to the safety team's message for that person."""
     inc = db().document("incidents", incident_id).get().to_dict() or {}
     order = inc.get("tripId", "-")
     trip = db().document("trips", order).get().to_dict() or {}
@@ -70,8 +78,9 @@ def _send_for_incident(incident_id: str, emails: tuple[email_content.Email, ...]
         to = uid and address(uid)
         if not to:
             continue
-        args = (first_name(uid), order, wib(trip.get("startedAt")), incident_id)
-        send(to, email_content.subject(e, order, incident_id), email_content.text(e, *args), email_content.html(e, *args))
+        ticket = email_content.ticket_number(incident_id)
+        args = (first_name(uid), order, wib(trip.get("startedAt")), ticket, (notes or {}).get(e.to, ""))
+        send(to, email_content.subject(e, order, ticket), email_content.text(e, *args), email_content.html(e, *args))
 
 
 def sos_received(incident_id: str) -> None:
@@ -79,6 +88,6 @@ def sos_received(incident_id: str) -> None:
     _send_for_incident(incident_id, (email_content.SOS_RECEIVED,))
 
 
-def decision(incident_id: str, action: str) -> None:
-    """Tells the rider (and the driver when they're warned or paused) what the safety team decided."""
-    _send_for_incident(incident_id, email_content.DECISION_EMAILS.get(action, ()))
+def decision(incident_id: str, customer: str, driver: str, customer_note: str = "", driver_note: str = "") -> None:
+    """Tells the rider what the safety team decided, and the driver too unless the driver decision is "none"."""
+    _send_for_incident(incident_id, email_content.decision_emails(customer, driver), {"rider": customer_note, "driver": driver_note})
