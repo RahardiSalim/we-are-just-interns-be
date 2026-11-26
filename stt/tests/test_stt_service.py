@@ -1,7 +1,9 @@
 """Tests for the STT module. They need numpy, scipy and soundfile only: the model
 backends (torch, transformers, silero-vad) are not imported, so these run in seconds."""
+import csv
 import sys
 import types
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -196,3 +198,38 @@ def test_whispercpp_backend_joins_segments_and_forces_indonesian(monkeypatch):
     assert calls["samples"] == S.SR
     assert backend.name == "whisper.cpp ggml-small-id-q8_0.bin"
 
+
+
+# ------------------------------------------- web-video hallucinations (seen on real phone calls)
+HALLUCINATIONS = [  # lines Whisper produced on the DataHive sample, 2026-11-26
+    "assalamualaikum selamat datang di video ini",
+    "selamat menikmati video ini",
+    "hai terjawabar ya guys soalnya kita akan menonton video ini sampai jumpa di video selanjutnya",
+    "halo halo halo lou lo a lo lou loo lo amin waduh oke boleh cari silahkan tombol like komen dan subscribe",
+    "sayurama di-reviewing di channel ini terima kasih untuk kalian yang sudah subscribe dan like",
+    "halo selamat datang di channel ini video ini adalah video yang terbaik untuk kalian yang suka",
+    "terima kasih selamat datang di video ini dan selamat menikmati",
+    "jangan lupa like dan subscribe untuk video ini dan selanjutnya",
+]
+
+
+@pytest.mark.parametrize("text", HALLUCINATIONS)
+def test_web_video_hallucinations_are_flagged(text):
+    assert "hallucination_lexicon_match" in S.make_flags(text, 3.0, {}, S.HALLUCINATION_PHRASES)
+
+
+def test_no_script_sentence_is_flagged_as_a_hallucination():
+    path = Path(__file__).resolve().parent.parent / "dialog_script.csv"
+    for row in csv.DictReader(open(path, encoding="utf-8")):
+        flags = S.make_flags(row["text"], 3.0, {}, S.HALLUCINATION_PHRASES)
+        assert "hallucination_lexicon_match" not in flags, row["text"]
+
+
+@pytest.mark.parametrize("text", [
+    "Walau ada tiga orang di dalam rumah yang ditabrak mobil, tak satu pun yang cedera.",
+    "Tolong pak, berhenti di sini, saya mau turun.",
+    "kita nonton film tadi malam di rumah teman",
+    "ilmuwan mengatakan bulu hewan ini berwarna cokelat seperti kastanye",
+])
+def test_ordinary_speech_is_not_flagged_as_a_hallucination(text):
+    assert "hallucination_lexicon_match" not in S.make_flags(text, 3.0, {}, S.HALLUCINATION_PHRASES)

@@ -55,10 +55,18 @@ DEFAULT_SLANG = {
 }
 # Do not add harassment or insult words to the slang map. Keep them as spoken.
 
+# Whisper fills unclear audio with the openings and endings of web videos. Real phone calls
+# (DataHive sample, 4 conversations, 652 segments) gave 23 such lines; the first six entries
+# below caught only 10. Matching is a plain substring on lower-case text. Keep entries narrow:
+# a match excludes the whole segment. Known trade-off: a person who really says "subscribe"
+# or "menonton video ini" loses that segment. No false match on 1,384 FLEURS and ride texts.
 HALLUCINATION_PHRASES = [
     "terima kasih telah menonton", "terima kasih sudah menonton",
     "jangan lupa subscribe", "like dan subscribe", "sampai jumpa di video berikutnya",
     "subtitle by", "amara.org",
+    "subscribe", "tombol like", "selamat datang di video", "selamat datang di channel",
+    "selamat menikmati video", "selamat menonton", "menonton video ini", "sampai jumpa di video",
+    "video selanjutnya",
 ]
 
 EXCLUDE_FLAGS = {"empty", "hallucination_lexicon_match", "likely_no_speech", "repetition_suspect"}
