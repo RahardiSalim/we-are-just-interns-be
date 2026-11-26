@@ -82,12 +82,17 @@ def _send_smtp(to: str, subject: str, text: str, html: str | None) -> None:
 
 
 def address(uid: str) -> str | None:
-    """The account email from Firebase Auth, so no extra field is stored in Firestore."""
+    """The account email from Firebase Auth; else the one the person typed in the app (`users.email`,
+    for the phone's anonymous accounts). None when neither exists, and the email is skipped."""
     try:
-        return auth.get_user(uid, app=init()).email
+        email = auth.get_user(uid, app=init()).email
     except Exception:
-        log.exception("no email for uid=%s", uid)
-        return None
+        log.exception("no auth account for uid=%s", uid)
+        email = None
+    email = email or (db().document("users", uid).get().to_dict() or {}).get("email")
+    if not email:
+        log.info("no email address for uid=%s: email skipped", uid)
+    return email
 
 
 def first_name(uid: str) -> str:

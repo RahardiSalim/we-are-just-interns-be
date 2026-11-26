@@ -9,6 +9,7 @@ Data truth for all three apps. Only the backend writes; clients read. Audio live
 | `role` | `rider` \| `driver` \| `agent` (also set as a custom claim) |
 | `displayName` | string |
 | `phone` | string, the phone number on the Gojek account (riders and drivers). Agents see it on the case page to call them. Demo seed: fake numbers |
+| `email` | string, where the safety team's emails go (SOS received, the agent's decision) for a phone account without its own (the app's anonymous sign-in). Set by the person in the app through `POST /me/email`; an Auth account's email wins |
 | `fcmToken` | string |
 | `audioConsent` | bool |
 | `safeRideBadge` | bool |

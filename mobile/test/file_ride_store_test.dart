@@ -32,6 +32,17 @@ void main() {
     expect(await store.pieceCount('GR-NONE'), 0);
   });
 
+  test('the email is kept sealed on the phone and read back', () async {
+    expect(await store.email(), isNull);
+    await store.setEmail('rina@example.com');
+    expect(await store.email(), 'rina@example.com');
+    expect(
+      File('${root.path}/email.enc').readAsStringSync(),
+      isNot(contains('rina@')),
+      reason: 'sealed, not plain',
+    );
+  });
+
   test('details round-trip, and a ride is deleted with its folder', () async {
     final meta = RideMeta(
       tripId: 'GR-1',

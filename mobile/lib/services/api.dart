@@ -85,6 +85,9 @@ class Api {
 
   Future<void> endTrip(String tripId) => _post('/trips/$tripId/end');
 
+  /// Where the safety team's emails go. The account is anonymous, so the person typed it in the app.
+  Future<void> setEmail(String email) => _post('/me/email', {'email': email});
+
   /// trigger: sos | manual_unsafe | auto. Sends the phone's transcript window and verdict.
   Future<String> report(
     String tripId,

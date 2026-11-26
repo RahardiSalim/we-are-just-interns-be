@@ -53,6 +53,54 @@
         ]
       }
     },
+    "/me/email": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Set Email",
+        "operationId": "set_email_me_email_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Email"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Set Email Me Email Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
     "/me/fcm-token": {
       "post": {
         "tags": [
@@ -893,6 +941,22 @@
         "type": "object",
         "title": "Decision",
         "description": "A decision for the customer OR the driver (or both); a side left out means no action for that person.\nBoth \"none\" dismisses the case: the customer is told nothing needs further action and the driver hears nothing.\nEach note is the safety team's message in that person's email."
+      },
+      "Email": {
+        "properties": {
+          "email": {
+            "type": "string",
+            "maxLength": 254,
+            "pattern": "^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$",
+            "title": "Email"
+          }
+        },
+        "type": "object",
+        "required": [
+          "email"
+        ],
+        "title": "Email",
+        "description": "Where the safety team's emails go (SOS received, the agent's decision). The phone signs in\nanonymously, so its account has no address of its own; the person types one in the app."
       },
       "EventBatch": {
         "properties": {
