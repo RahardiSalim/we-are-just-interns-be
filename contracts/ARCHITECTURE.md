@@ -148,6 +148,22 @@ Local development: Firebase Local Emulator Suite (Auth, Firestore, Storage); bac
 
 One shared Firebase + GCP project, emulators locally, a `DEMO_MODE` flag instead of a separate prod project.
 
+### Demo deployment (hackathon, 27 Nov 2026)
+
+Cloud Run is still the target above. For the demo, without a GCP billing account, the stack runs on free tiers:
+
+| Piece | Where | Notes |
+|---|---|---|
+| backend | Render web service `gosafe-api` (free), branch `main`, root `backend/`, the same `Dockerfile` | Sleeps after about 15 min idle: call `/health` before the demo. Env vars and a Secret File are set in Render, not in the repo |
+| Firestore + Auth | Firebase project `gosafe-hackathon`, Spark plan (no card) | Firestore in `asia-southeast2`. Sign-in: Email/Password (dashboard) and Anonymous (app). Rules and indexes deployed from `firebase/`; seeded with `scripts.seed` |
+| Ride audio | Cloudflare R2 bucket `gosafe-hackathon` (`R2_*` env vars) | Replaces Firebase Storage, which needs Blaze |
+| AI review | OpenRouter (`LLM_BASE_URL=https://openrouter.ai/api/v1`), a free model set by `LLM_MODEL` | Free models are rate-limited (429 seen on two of three tried). The review falls back to rules. Stored with `source: "sahabat-ai"` because that is the only LLM source the schema has, so the dashboard shows "Sahabat-AI" for it |
+| dashboard | Vercel, as above | `NEXT_PUBLIC_*` point at `gosafe-hackathon` and the Render URL |
+
+**Breaks rule 2:** off Google Cloud there is no attached service account, so the backend on Render reads a Firebase service-account key from a Render Secret File (`GOOGLE_APPLICATION_CREDENTIALS`). The key is only on the backend host and never in the repo or an app. Rotate it after the demo, or move back to Cloud Run.
+
+Decision emails go to the Firebase Auth address of the rider and driver. The seeded accounts use `@gosafe.test`, which cannot receive mail.
+
 ## Phases
 
 | Phase | Done when |
@@ -169,8 +185,8 @@ Waiting on something outside the code. Build around these with stubs or seed dat
 | Sahabat-AI summary | A hosted endpoint (`LLM_BASE_URL`, `LLM_API_KEY`) | Seeded summary |
 | On-device Whisper + IndoBERT | Modelling team: ONNX exports, the warning/high thresholds, a speed and battery benchmark on a mid-range phone | The app sends a canned transcript and label so the backend flow can be tested |
 | Sample audio | Team recordings | `clipPath: null` in the seed |
-| Firebase project | Blaze plan + budget alert | Emulators (`demo-gosafe`) |
-| Backend deploy | GitHub repo variables `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA` (Workload Identity Federation) | Run locally |
+| Firebase project (Blaze) | Blaze plan + budget alert, for Cloud Run and Firebase Storage | Spark project `gosafe-hackathon` + R2 + Render (see "Demo deployment") |
+| Backend deploy (Cloud Run) | GitHub repo variables `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA` (Workload Identity Federation) | Render (see "Demo deployment") |
 | Mobile listening service | Android SDK + a real phone (the microphone service can't run in the web preview) | Mock trip screen in `mobile/` |
 | Warning message wording | Team / pitch owner | Placeholder text |
 

@@ -21,6 +21,6 @@ Commands (from `backend/`, needs `uv`):
 | Run | `uv run uvicorn app.main:app --reload` |
 | Seed | `SEED_PASSWORD=... uv run python -m scripts.seed` (accounts are `<uid>@gosafe.test`) |
 | Export contract | `uv run python -m scripts.export_openapi` (after any route change; commit `contracts/openapi.json`) |
-| Deploy | push to `main`; `.github/workflows/backend.yml` tests then deploys to Cloud Run |
+| Deploy | push to `main`; `.github/workflows/backend.yml` tests then deploys to Cloud Run (skipped until the GCP variables exist). For the demo it runs on Render: see ARCHITECTURE.md "Demo deployment" |
 
 Against the emulators, set `FIREBASE_AUTH_EMULATOR_HOST=localhost:9099` and `FIRESTORE_EMULATOR_HOST=localhost:8080` (start them from `firebase/` with `firebase emulators:start`).
