@@ -1,0 +1,23 @@
+# Recordings and test sets are never committed (consent, privacy, size)
+*.wav
+*.mp3
+*.flac
+*.ogg
+*.opus
+*.m4a
+/clean*/
+/noisy*/
+/demo/
+/data_raw/
+
+# Downloaded model files: pinned by revision and hash in models/*.sha256, never committed
+/models/*/
+*.onnx
+
+# Generated output
+/results*.csv
+/out*.json
+/review/
+/logs/
+/convo_out/
+/datasets/

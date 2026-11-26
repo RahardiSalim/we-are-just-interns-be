@@ -1,0 +1,25 @@
+file,text,label,speaker
+c01.wav,"Selamat siang mbak, tujuannya ke Stasiun Tebet ya?",normal,driver
+c02.wav,"Iya pak, lewat jalan biasa aja nggak apa-apa.",normal,passenger
+c03.wav,"Macet banget hari ini, saya lewat gang aja ya biar cepat.",normal,driver
+c04.wav,"Boleh pak, tolong pelan-pelan aja soalnya saya bawa laptop.",normal,passenger
+c05.wav,"Udah sampai ya mbak, makasih ya, hati-hati.",normal,driver
+c06.wav,"Makasih banyak pak, saya kasih bintang lima.",normal,passenger
+c07.wav,"Mbak cantik banget hari ini, mau ke mana sih?",uncomfortable,driver
+c08.wav,"Mau ke kantor pak, tolong fokus ke jalan aja ya.",uncomfortable,passenger
+c09.wav,"Udah punya pacar belum mbak? Kok sendirian terus.",uncomfortable,driver
+c10.wav,"Bapak nggak perlu tanya yang pribadi ya.",uncomfortable,passenger
+c11.wav,"Boleh minta nomor WhatsApp mbak? Biar gampang kalau mau ngobrol.",uncomfortable,driver
+c12.wav,"Maaf pak, saya nggak kasih nomor saya.",uncomfortable,passenger
+c13.wav,"Badan mbak bagus banget ya, kayak model.",sexual_harassment,driver
+c14.wav,"Pak, tolong jangan ngomong kayak gitu, saya nggak nyaman.",sexual_harassment,passenger
+c15.wav,"Ah jangan sok jual mahal mbak, aku cuma muji kok.",sexual_harassment,driver
+c16.wav,"Berhenti ngomong begitu, saya mau turun sekarang.",sexual_harassment,passenger
+c17.wav,"Duduknya geser dekat sini aja, biar nggak dingin.",sexual_harassment,driver
+c18.wav,"Nggak usah pak, saya duduk di sini aja.",sexual_harassment,passenger
+c19.wav,"Kalau kamu teriak, saya nggak akan antar kamu pulang.",threat,driver
+c20.wav,"Tolong pak, berhenti di sini, saya mau turun.",threat,passenger
+c21.wav,"Diam aja, saya tau kamu tinggal di mana.",threat,driver
+c22.wav,"Tolong jangan ancam saya, saya mau lapor.",threat,passenger
+c23.wav,"Mbak ojolnya cantik, ikut aku aja yuk, nggak usah narik lagi.",sexual_harassment,passenger
+c24.wav,"Maaf mas, saya lagi kerja, tolong jangan begitu.",sexual_harassment,driver

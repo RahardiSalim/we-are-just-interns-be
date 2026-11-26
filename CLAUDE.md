@@ -15,6 +15,7 @@ Read before writing code:
 | `dashboard/` | Next.js | Vercel (root dir `dashboard/`) |
 | `mobile/` | Flutter, Android only | Firebase App Distribution |
 | `firebase/` | rules, indexes, `firebase.json` | `firebase deploy` |
+| `stt/` | Python, speech-to-text reference pipeline and benchmark ([stt/README.md](stt/README.md)) | Not deployed: STT runs on the phones |
 
 ## Run everything locally
 
