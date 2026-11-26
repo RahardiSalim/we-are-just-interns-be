@@ -11,7 +11,9 @@ import 'package:path_provider/path_provider.dart';
 import 'engine/safe_phrase.dart';
 import 'features/safety/are_you_ok.dart' show SafetyText;
 import 'features/trip/trip_screen.dart';
+import 'engine/safety_engine.dart';
 import 'services/api.dart';
+import 'services/dev_ml.dart';
 import 'services/mock_listener.dart';
 import 'services/file_ride_store.dart';
 import 'services/recorder.dart';
@@ -24,6 +26,8 @@ import 'theme.dart';
 const _useEmulators = bool.fromEnvironment('USE_EMULATORS', defaultValue: true);
 // 10.0.2.2 is this Mac as seen from the Android emulator.
 const _emulatorHost = String.fromEnvironment('EMULATOR_HOST');
+const _devMlUrl = String.fromEnvironment('DEV_ML');
+final _devMl = _devMlUrl.isEmpty ? null : DevClassifier(Uri.parse(_devMlUrl));
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -69,6 +73,7 @@ class GoSafeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final db = FirebaseFirestore.instance;
+    final dev = _devMl;
     return MaterialApp(
       title: 'GoSafe',
       // Plus Jakarta Sans stands in for Asphalt's Maison Neue (licensed); see contracts/DESIGN.md.
@@ -84,11 +89,22 @@ class GoSafeApp extends StatelessWidget {
         api: Api(token: () => user.getIdToken()),
         recorder: MicRecorder(store),
         store: store,
-        listen: () => scriptedListener(
-          lines: const String.fromEnvironment('DEMO_SCRIPT') == 'safe_phrase'
-              ? safePhraseConversation
-              : demoConversation,
-        ),
+        // DEV_ML: the real mic through the laptop's Whisper and classifier (stt/dev_server.py).
+        listen: dev == null
+            ? () => scriptedListener(
+                lines:
+                    const String.fromEnvironment('DEMO_SCRIPT') == 'safe_phrase'
+                    ? safePhraseConversation
+                    : demoConversation,
+              )
+            : () => devListener(dev.server, dev),
+        engine: dev == null ? null : () => SafetyEngine(classifier: dev),
+        describe: dev == null
+            ? null
+            : (line) => switch (dev.raw[line]) {
+                (final label, final p) => '$label ${p.toStringAsFixed(2)}',
+                null => null,
+              },
         // shortcut: one phrase for everyone; let each rider pick theirs in settings later.
         safePhrase: const SafePhrase(
           String.fromEnvironment(

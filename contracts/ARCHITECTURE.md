@@ -37,7 +37,7 @@ Agreed 2026-11-26. **The mobile app is the core:** everything from speech-to-tex
 1. Microphone: records the whole ride (16 kHz mono, AAC `.m4a`).
 2. Silero VAD (voice detection) via `sherpa_onnx`, so speech-to-text only runs while someone is talking. *Not built yet.*
 3. Whisper (`cahya/whisper-small-id`, ONNX int8) via `sherpa_onnx` on each utterance as it ends. sherpa-onnx has no official streaming Indonesian model, so VAD + Whisper is the plan. *Not built yet: a scripted conversation stands in.*
-4. IndoBERT (ONNX int8, ONNX Runtime) on a sliding window of the last 30 s of text → `label` + `score`. Needs its WordPiece tokenizer in Dart. *Not built yet: a keyword filter stands in.*
+4. IndoBERT (ONNX int8, ONNX Runtime) on a sliding window of the last 15 s of text → `label` + `score`. Needs its WordPiece tokenizer in Dart. *Not built yet: a keyword filter stands in.*
 
 **Responses.** The two thresholds are set by the modelling team from their test set. Every message is short and caring, never alarming.
 

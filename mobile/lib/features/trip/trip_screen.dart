@@ -38,6 +38,7 @@ class TripScreen extends StatefulWidget {
     this.clearAlert,
     this.dial,
     this.safePhrase,
+    this.describe,
   });
 
   final Api api;
@@ -64,6 +65,9 @@ class TripScreen extends StatefulWidget {
   /// The hands-free SOS: hearing it sends a silent SOS (no dialog, no alarm the other person could
   /// notice). Null turns it off.
   final SafePhrase? safePhrase;
+
+  /// A note shown under each heard line, e.g. the dev classifier's raw label. Null shows nothing.
+  final String? Function(String line)? describe;
 
   @override
   State<TripScreen> createState() => _TripScreenState();
@@ -541,15 +545,28 @@ class _TripScreenState extends State<TripScreen> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: Text(
-                        'Heard (temporary speech-to-text)',
+                        widget.describe == null
+                            ? 'Heard (temporary speech-to-text)'
+                            : 'Heard (Whisper on the laptop · classifier label)',
                         style: text.labelMedium,
                       ),
                     ),
                     for (final (i, (_, t)) in _heard.indexed)
                       Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text(
-                          t,
+                        child: Text.rich(
+                          TextSpan(
+                            text: t,
+                            children: [
+                              if (widget.describe?.call(t) case final note?)
+                                TextSpan(
+                                  text: '   $note',
+                                  style: text.labelMedium?.copyWith(
+                                    color: GoSafeColors.muted,
+                                  ),
+                                ),
+                            ],
+                          ),
                           key: ValueKey('heard-$i'),
                           style: text.bodySmall,
                         ),

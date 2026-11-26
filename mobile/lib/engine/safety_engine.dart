@@ -36,7 +36,7 @@ class Decision {
   const Decision(this.action, this.verdict, this.window);
   final SafetyAction action;
   final Verdict verdict;
-  final List<Line> window; // the evidence: the last 30 s of transcript
+  final List<Line> window; // the evidence: the last 15 s of transcript
 }
 
 /// The phone's judgement: transcript in, warn / high / nothing out.
@@ -48,7 +48,7 @@ class SafetyEngine {
     // shortcut: placeholder thresholds; the modelling team sets the real ones from their test set.
     this.warnAt = 0.6,
     this.highAt = 0.8,
-    this.window = const Duration(seconds: 30),
+    this.window = const Duration(seconds: 15),
     this.warnCooldown = const Duration(minutes: 10),
   }) : _clock = clock ?? DateTime.now;
 
