@@ -613,11 +613,8 @@ class _TripScreenState extends State<TripScreen> {
                 color: Colors.white,
                 shape: BoxShape.circle,
               ),
-              child: const Icon(
-                Icons.verified_user_rounded,
-                color: GoSafeColors.brand,
-                size: 20,
-              ),
+              padding: const EdgeInsets.all(4),
+              child: Image.asset('assets/brand/gosafe.png'),
             ),
             const Text('GoSafe'),
           ],
@@ -773,14 +770,18 @@ class _TripScreenState extends State<TripScreen> {
                   if (_driver)
                     GoCard(
                       padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: SwitchListTile(
-                        secondary: const CircleIcon(
-                          Icons.verified_user_rounded,
+                      // Its own Material, so the tap ripple shows above the card's white box.
+                      child: Material(
+                        type: MaterialType.transparency,
+                        child: SwitchListTile(
+                          secondary: const CircleIcon(
+                            Icons.verified_user_rounded,
+                          ),
+                          title: const Text('Safe Ride'),
+                          subtitle: const Text(SafetyText.safeRideSetting),
+                          value: _safeRide,
+                          onChanged: (v) => setState(() => _safeRide = v),
                         ),
-                        title: const Text('Safe Ride'),
-                        subtitle: const Text(SafetyText.safeRideSetting),
-                        value: _safeRide,
-                        onChanged: (v) => setState(() => _safeRide = v),
                       ),
                     ),
                 ],

@@ -120,7 +120,17 @@ void main() {
       final c = KeywordClassifier();
       expect(c.classify(['Anjing lu, bangsat!']).label, Label.uncomfortable);
       expect(c.classify(['Dasar perempuan bodoh.']).label, Label.uncomfortable);
-      expect(c.classify(['What the fuck, Pak.']).label, Label.uncomfortable);
+      expect(c.classify(['Fuck you, Pak.']).label, Label.uncomfortable);
+      expect(
+        c.classify(['Anjir, macet banget.']).label,
+        Label.normal,
+        reason: 'swearing at the traffic, not at anyone',
+      );
+      expect(
+        c.classify(['Bos gue bangsat banget.']).label,
+        Label.normal,
+        reason: 'about a third person',
+      );
       expect(c.classify(['Dasar lonte.']).label, Label.sexualHarassment);
       expect(
         c.classify(['Anjingnya lucu banget.']).label,
@@ -135,4 +145,20 @@ void main() {
       );
     },
   );
+
+  test('threat words with Indonesian prefixes and in English', () {
+    final c = KeywordClassifier();
+    for (final line in [
+      'saya akan membunuh kamu',
+      'nanti kamu dibunuh',
+      'gue pukul lu',
+      'saya memukul kamu',
+      'gue hajar lu',
+      'saya mutilasi kamu',
+      'kalau enggak i will kill you',
+      'gue habisin lu',
+    ]) {
+      expect(c.classify([line]).label, Label.threat, reason: line);
+    }
+  });
 }

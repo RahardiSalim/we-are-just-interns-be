@@ -6,7 +6,7 @@ Single source of truth for building the three apps. Where the earlier "System de
 
 | Part | Pick | Notes |
 |---|---|---|
-| Android app | Flutter (Android only) | Listens for the whole trip on both phones (see "On-device listening"). Foreground service with the `microphone` type; `sherpa_onnx` for voice detection + Whisper; ONNX Runtime for IndoBERT. |
+| Android app | Flutter (Android only) | Listens for the whole trip on both phones (see "On-device listening"). Foreground service with the `microphone` type; whisper.cpp (`whisper_ggml`) for voice detection + Whisper; ONNX Runtime for IndoBERT-lite. The models are bundled in the app (edge AI). |
 | Backend | FastAPI on Cloud Run | Same Google project as Firebase, so Firestore, Storage and FCM work with no extra keys. No speech or classifier models on the server: those run on the phones. |
 | Database | Firestore | Not relational. Holds no location data (see "No location data"). |
 | Files | Cloud Storage for Firebase | Requires the **Blaze** plan (fails with 402/403 on Spark). Add a budget alert. |
@@ -35,9 +35,9 @@ Agreed 2026-11-26. **The mobile app is the core:** everything from speech-to-tex
 
 **Pipeline on the phone.**
 1. Microphone: records the whole ride (16 kHz mono, AAC `.m4a`).
-2. Silero VAD (voice detection) via `sherpa_onnx`, so speech-to-text only runs while someone is talking. *Not built yet.*
-3. Whisper (`cahya/whisper-small-id`, ONNX int8) via `sherpa_onnx` on each utterance as it ends. sherpa-onnx has no official streaming Indonesian model, so VAD + Whisper is the plan. *Not built yet: a scripted conversation stands in.*
-4. IndoBERT (ONNX int8, ONNX Runtime) on a sliding window of the last 15 s of text → `label` + `score`. Needs its WordPiece tokenizer in Dart. *Not built yet: a keyword filter stands in.*
+2. Silero VAD v5.1.2 (voice detection, ggml 0.9 MB) inside whisper.cpp, so silence never reaches the decoder. *Built.*
+3. Whisper maleo base, Indonesian (ggml q8_0, 82 MB) via whisper.cpp (`whisper_ggml`), on 6-second pieces; a sentence still going is carried into the next piece. *Built* (`mobile/lib/services/on_device_stt.dart`, `edge_ai.dart`).
+4. IndoBERT-lite clf-lite-5x (ONNX, word table int8, 35 MB, ONNX Runtime) on each line, combined with the keyword filter over the last 15 s of text → `label` + `score`. Its WordPiece tokenizer is ported to Dart. *Built*; tested on the Android emulator, not yet on a real phone.
 
 **Responses.** The two thresholds are set by the modelling team from their test set. Every message is short and caring, never alarming.
 

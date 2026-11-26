@@ -131,6 +131,10 @@ class Harness {
   SafetyEngine Function()? engine;
 
   Future<void> pump(WidgetTester tester) async {
+    // A phone-sized screen (the default 800x600 puts the bottom sheets' buttons off-screen).
+    tester.view.physicalSize = const Size(1236, 2745);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
     await tester.pumpWidget(
       MaterialApp(
         home: TripScreen(
@@ -178,6 +182,7 @@ class Harness {
 
 /// The ride screen is a sheet over a map: scroll a button into view before tapping it.
 Future<void> tapIn(WidgetTester tester, Finder finder) async {
+  await tester.pumpAndSettle(); // a bottom sheet slides in: tap it where it ends up
   await tester.ensureVisible(finder);
   await tester.pump();
   await tester.tap(finder);

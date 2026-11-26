@@ -36,6 +36,28 @@ class KeywordClassifier implements Classifier {
       'tusuk',
       'pisau',
       'culik',
+      // Indonesian puts prefixes on verbs ("membunuh", "dipukul"), which plain words don't match.
+      'membunuh',
+      'dibunuh',
+      'memukul',
+      'dipukul',
+      'menghajar',
+      'dihajar',
+      'menusuk',
+      'ditusuk',
+      'menculik',
+      'diculik',
+      'mutilasi',
+      'bacok',
+      'dibacok',
+      'habisin',
+      'perkosa',
+      'memperkosa',
+      // English threats in code-mixed talk.
+      'kill you',
+      'kill u',
+      'i will kill',
+      'beat you',
       'awas kamu',
       'diem aja',
       'diam aja',
@@ -50,7 +72,11 @@ class KeywordClassifier implements Classifier {
       'cantik banget',
       'seksi',
       'bodinya',
-      'pegang',
+      // Not bare 'pegang': on a motorbike "pegangan" / "pegang erat" is ordinary safety talk.
+      'pegang-pegang',
+      'pegang tangan',
+      'pegang paha',
+      'pegang badan',
       'cium',
       'raba',
       'tidur bareng',
@@ -76,41 +102,53 @@ class KeywordClassifier implements Classifier {
       'nomor wa',
       'umur berapa',
       'sayang',
-      // Swearing and insults: a kind warning, never a high flag on their own (anger isn't danger).
-      'anjing',
-      'anjir',
-      'babi',
-      'bangsat',
-      'bajingan',
-      'brengsek',
-      'keparat',
-      'kampret',
-      'sialan',
-      'setan',
-      'tai',
-      'tahi',
-      'asu',
-      'jancok',
-      'jancuk',
-      'ngentot',
-      'entot',
-      'kontol',
-      'memek',
-      'goblok',
-      'goblog',
-      'tolol',
-      'bego',
-      'bodoh',
-      'idiot',
-      'fuck',
-      'fucking',
-      'shit',
-      'bitch',
-      'bastard',
     ],
   };
 
-  static const _noSuffix = {'sayang', 'anjing', 'babi', 'setan', 'tai', 'asu'};
+  static const _noSuffix = {'sayang'};
+
+  // Swearing counts only when aimed at someone, i.e. an addressee in the same line ("anjing lu", "dasar tolol").
+  // Swearing at traffic or about a third person ("anjir macet", "bos gue bangsat") is ordinary talk. Uncomfortable
+  // at most: a kind warning, never a high flag on its own (anger isn't danger).
+  static const _swears = [
+    'anjing',
+    'anjir',
+    'babi',
+    'bangsat',
+    'bajingan',
+    'brengsek',
+    'keparat',
+    'kampret',
+    'sialan',
+    'setan',
+    'tai',
+    'tahi',
+    'asu',
+    'jancok',
+    'jancuk',
+    'ngentot',
+    'entot',
+    'kontol',
+    'memek',
+    'goblok',
+    'goblog',
+    'tolol',
+    'bego',
+    'bodoh',
+    'idiot',
+    'fuck',
+    'fucking',
+    'shit',
+    'bitch',
+    'bastard',
+  ];
+  static final _swearPattern = RegExp(
+    r'\b(?:' + _swears.map(RegExp.escape).join('|') + r')\b',
+  );
+  // Not "kau": rare in Jakarta talk, and Whisper writes it for "kalau".
+  static final _addressee = RegExp(
+    r'\b(?:lu|lo|elu|elo|loe|kamu|situ|ente|dasar|you)\b',
+  );
 
   static final _patterns = {
     for (final e in _lexicon.entries)
@@ -145,6 +183,13 @@ class KeywordClassifier implements Classifier {
                 .length; // phrases, not lines: two in one sentence is stronger
             if (n > 0) {
               hits[e.key] = (hits[e.key] ?? 0) + n;
+              any = true;
+            }
+          }
+          if (_addressee.hasMatch(text)) {
+            final n = _swearPattern.allMatches(text).length;
+            if (n > 0) {
+              hits[Label.uncomfortable] = (hits[Label.uncomfortable] ?? 0) + n;
               any = true;
             }
           }

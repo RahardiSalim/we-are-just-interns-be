@@ -46,6 +46,22 @@ def keep_real_speech(text: str) -> str:
     return text[:cut].strip(" ,.")
 
 
+def clean(segments: list[dict], log=None) -> list[dict]:
+    """Which segments become lines, with an invented outro cut off. Shared with eval/score.py."""
+    lines = []
+    for seg in segments:
+        text, flags = seg["text_raw"], set(seg["flags"])
+        if "hallucination_lexicon_match" in flags:
+            text = keep_real_speech(text)
+            flags -= {"hallucination_lexicon_match", "repetition_suspect", "excluded_from_classifier"}
+        kept = bool(text) and not ({"excluded_from_classifier", "empty", "likely_no_speech", "repetition_suspect"} & flags)
+        if log:
+            log(seg, kept, text)
+        if kept:
+            lines.append({"start": seg["start_s"], "end": seg["end_s"], "text": text})
+    return lines
+
+
 def transcribe(wav: bytes, offset: float) -> list[dict]:
     audio, sr = sf.read(io.BytesIO(wav), dtype="float32")
     if audio.ndim > 1:
@@ -59,17 +75,9 @@ def transcribe(wav: bytes, offset: float) -> list[dict]:
         win = process_window(audio, stt, vad, offset_s=offset)
     if not win["segments"]:
         print(f"  {len(audio) / sr:4.1f}s audio at {offset:.0f}s -> no speech found", flush=True)
-    lines = []
-    for seg in win["segments"]:  # what Whisper heard, kept or dropped, so a test can be checked
-        text, flags = seg["text_raw"], set(seg["flags"])
-        if "hallucination_lexicon_match" in flags:
-            text = keep_real_speech(text)
-            flags -= {"hallucination_lexicon_match", "repetition_suspect", "excluded_from_classifier"}
-        kept = bool(text) and not ({"excluded_from_classifier", "empty", "likely_no_speech", "repetition_suspect"} & flags)
-        print(f"  {len(audio) / sr:4.1f}s audio at {offset:.0f}s -> {'KEPT ' if kept else 'DROP '}{seg['text_raw']!r}"
-              f"{' => ' + repr(text) if kept and text != seg['text_raw'] else ''} {sorted(seg['flags']) or ''}", flush=True)
-        if kept:
-            lines.append({"start": seg["start_s"], "end": seg["end_s"], "text": text})
+    lines = clean(win["segments"], log=lambda seg, kept, text: print(
+        f"  {len(audio) / sr:4.1f}s audio at {offset:.0f}s -> {'KEPT ' if kept else 'DROP '}{seg['text_raw']!r}"
+        f"{' => ' + repr(text) if kept and text != seg['text_raw'] else ''} {sorted(seg['flags']) or ''}", flush=True))
     return lines
 
 

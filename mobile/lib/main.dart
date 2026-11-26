@@ -1,3 +1,4 @@
+import 'dart:async' show unawaited;
 import 'dart:io' show Directory;
 
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -15,6 +16,7 @@ import 'features/trip/trip_screen.dart';
 import 'engine/safety_engine.dart';
 import 'services/api.dart';
 import 'services/dev_ml.dart';
+import 'services/edge_ai.dart';
 import 'services/mock_listener.dart';
 import 'services/on_device_stt.dart';
 import 'services/file_ride_store.dart';
@@ -43,10 +45,14 @@ const _demoScript = String.fromEnvironment('DEMO_SCRIPT');
 final _scenario = scenarioNamed(
   kIsWeb ? Uri.base.queryParameters['scenario'] ?? _demoScript : _demoScript,
 );
-final _devMl = _devMlUrl.isEmpty ? null : DevClassifier(Uri.parse(_devMlUrl));
-// Experiment: speech-to-text on the phone itself (services/on_device_stt.dart). WHISPER_MODEL is the
-// ggml file on the phone, WHISPER_VAD the Silero ggml file, WHISPER_TEST_WAV a 16 kHz mono WAV to
-// hear instead of the microphone.
+final _devMl = _devMlUrl.isEmpty
+    ? null
+    : ModelClassifier.server(Uri.parse(_devMlUrl));
+// Edge AI (services/edge_ai.dart): on Android the phone transcribes and classifies the ride itself, with
+// the models bundled in the app. DEMO_SCRIPT (or DEV_ML) replaces it with a scripted or laptop listener.
+// To try other speech models: WHISPER_MODEL / WHISPER_VAD, ggml files on the phone; WHISPER_TEST_WAV, a
+// 16 kHz mono WAV to hear instead of the microphone.
+final _edge = kIsWeb || _devMlUrl.isNotEmpty || _demoScript.isNotEmpty ? null : EdgeAi();
 const _whisperModel = String.fromEnvironment('WHISPER_MODEL');
 const _whisperVad = String.fromEnvironment('WHISPER_VAD');
 const _whisperTestWav = String.fromEnvironment('WHISPER_TEST_WAV');
@@ -78,6 +84,7 @@ Future<void> main() async {
           open: Ride.open,
         );
   runApp(GoSafeApp(user: user, store: store));
+  if (_edge != null) unawaited(EdgeAi.prepare());
 }
 
 class GoSafeApp extends StatelessWidget {
@@ -89,7 +96,8 @@ class GoSafeApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final db = FirebaseFirestore.instance;
-    final dev = _devMl;
+    // The model-backed classifier in use (laptop or phone), if any.
+    final model = _devMl ?? _edge?.classifier;
     return MaterialApp(
       title: 'GoSafe',
       // The Gojek consumer app is light; the dark theme stays for later.
@@ -110,14 +118,14 @@ class GoSafeApp extends StatelessWidget {
         api: Api(token: () => user.getIdToken()),
         recorder: MicRecorder(store),
         store: store,
-        // DEV_ML: the real mic through the laptop's Whisper and classifier (stt/dev_server.py).
-        // WHISPER_MODEL: speech-to-text on the phone. Otherwise a test scenario, or the demo conversation.
-        listen: dev != null
-            ? () => devListener(dev.server, dev)
-            : _whisperModel.isNotEmpty
-            ? () => onDeviceListener(
-                modelPath: _whisperModel,
-                vadModelPath: _whisperVad.isEmpty ? null : _whisperVad,
+        // DEV_ML: the real mic through the laptop's Whisper and classifier (stt/dev_server.py). On Android:
+        // edge AI. Otherwise a test scenario, or the demo conversation (DEMO_SCRIPT=demo).
+        listen: _devMl != null
+            ? () => devListener(Uri.parse(_devMlUrl), _devMl!)
+            : _edge != null
+            ? () => _edge!.listen(
+                modelPath: _whisperModel.isEmpty ? null : _whisperModel,
+                vadPath: _whisperVad.isEmpty ? null : _whisperVad,
                 pcm: _whisperTestWav.isEmpty ? null : pcmFromWav(_whisperTestWav),
                 chunkSecs: _whisperChunkSecs,
               )
@@ -131,14 +139,16 @@ class GoSafeApp extends StatelessWidget {
                     : demoConversation,
               ),
         // A test scenario plays the model's labels back (lib/engine/scenarios.dart).
-        engine: dev != null
-            ? () => SafetyEngine(classifier: dev)
+        engine: model != null
+            ? () => SafetyEngine(classifier: model)
             : _scenario != null
             ? () => SafetyEngine(classifier: ScenarioClassifier(_scenario!))
             : null,
-        describe: dev == null
+        // The transcript and labels are for the safety team (dashboard), never shown to the rider or
+        // driver: only the laptop test mode (DEV_ML) lists them on screen.
+        describe: _devMl == null
             ? null
-            : (line) => switch (dev.raw[line]) {
+            : (line) => switch (_devMl!.raw[line]) {
                 (final label, final p) => '$label ${p.toStringAsFixed(2)}',
                 null => null,
               },
