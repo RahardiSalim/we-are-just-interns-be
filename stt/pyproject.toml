@@ -1,0 +1,25 @@
+[project]
+name = "gosafe-stt"
+version = "0.1.0"
+description = "GoSafe speech-to-text module: VAD, STT, filters, PII masking and the gosafe.stt.window.v1 JSON window"
+requires-python = ">=3.12"
+# Tested versions are listed in README.md. Only the tests run without these ML libraries.
+dependencies = [
+    "numpy>=2",
+    "scipy>=1.11",
+    "soundfile>=0.12",
+    "jiwer>=3",
+    "torch>=2.2",
+    "transformers>=4.40",
+    "silero-vad>=5",
+]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
