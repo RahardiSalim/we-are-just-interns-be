@@ -45,6 +45,7 @@ Read by: agents. (`stop` and `deviation` are kept in the enum but nothing produc
 | `tripId` | string |
 | `reportedBy` | uid |
 | `trigger` | `sos` \| `manual_unsafe` |
+| `windowStart`, `windowEnd` | timestamp (the audio window the reporter flagged) |
 | `status` | `awaiting_upload` \| `processing` \| `failed` \| `dismissed` \| `checkin_pending` \| `resolved_ok` \| `escalated` \| `under_review` \| `closed` |
 | `severity` | `low` \| `medium` \| `high` |
 | `label` | `normal` \| `uncomfortable` \| `sexual_harassment` \| `threat` |
@@ -56,6 +57,7 @@ Read by: agents. (`stop` and `deviation` are kept in the enum but nothing produc
 | `assignedAgent` | uid |
 | `decision` | `{ action: dismiss \| warn_driver \| suspend_driver \| contact_rider, note, agentId, ts }` |
 | `createdAt`, `deleteAt` | timestamp |
+| `error` | string, only when `status` is `failed` |
 
 Read by: reporter (own, limited fields), agents.
 

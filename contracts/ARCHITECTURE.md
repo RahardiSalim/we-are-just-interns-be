@@ -50,6 +50,7 @@ Every endpoint takes `Authorization: Bearer <Firebase ID token>`; the backend ch
 | `POST /incidents` | App | Body: `tripId`, `trigger`, window start/end, optional `deviceTranscript`, `deviceLabel`, `deviceScore`. Returns `incidentId` + signed upload URL (10 min) |
 | `POST /incidents/{id}/finalize` | App | Clip uploaded; returns 202 and starts processing |
 | `POST /checkins/{id}/reply` | App | `ok` or `need_help` |
+| `POST /incidents/{id}/open` | Dashboard (agent) | Takes an `escalated` ticket: `under_review`, `assignedAgent` = caller |
 | `GET /incidents/{id}/clip-url` | Dashboard (agent) | Short-lived signed read URL; writes an audit log |
 | `POST /incidents/{id}/decision` | Dashboard (agent) | `dismiss` \| `warn_driver` \| `suspend_driver` \| `contact_rider` + note |
 | `POST /dev/seed`, `POST /dev/reset` | Team only | Loads users, trips, sample incidents. Disabled when `ENABLE_DEV_ROUTES` is off |
@@ -60,12 +61,12 @@ Only the backend changes `status`.
 
 | Status | Set when | Next |
 |---|---|---|
-| `awaiting_upload` | `POST /incidents` | `processing` on finalize; `failed` after 10 min |
+| `awaiting_upload` | `POST /incidents` | `processing` on finalize (no 10-min `failed` sweep yet) |
 | `processing` | Finalize | STT → classifier → severity → `dismissed`, `checkin_pending` or `escalated` |
 | `dismissed` | Severity low | Logged, deleted at `deleteAt` |
 | `checkin_pending` | Severity medium; FCM push + `checkins` doc to rider and driver | `resolved_ok` if both reply ok; `escalated` on `need_help` or no reply in 90 s |
 | `escalated` | Severity high or failed check-in; timeline + LLM summary built | `under_review` when an agent opens it |
-| `under_review` | Agent opens the ticket | `closed` after a decision |
+| `under_review` | Agent calls `POST /incidents/{id}/open` | `closed` after a decision |
 | `closed` | Decision recorded | Driver may appeal (stretch) |
 
 Processing: download clip → Chirp 3 STT (`id-ID`, 16 kHz mono WAV/FLAC) unless a device transcript was sent → IndoBERT on 30 s windows → combine with trip events for severity → for escalations, Sahabat-AI (or a hosted LLM) writes the summary from the masked transcript and timeline.
@@ -127,6 +128,11 @@ Waiting on something outside the code. Build around these with stubs or seed dat
 | Mobile app | Flutter SDK + Android phone on a dev machine | Not started |
 
 ## Decisions (where the two source docs disagreed)
+
+- **Severity rules** (`backend/app/services/pipeline.py`): `threat` or `sexual_harassment` → high (escalate). No label at all and trigger `sos` → high. Everything else → medium (check-in). A person pressed the button, so the backend never dismisses on its own; `dismissed` stays for future automatic triggers.
+- **Classifier until IndoBERT lands:** an Indonesian keyword filter (`app/services/classify.py`). A `deviceLabel` from the phone always wins; the filter still marks `flagged` lines.
+- **Summary until Sahabat-AI is hosted:** a template from the masked flagged lines (phone numbers masked; names not yet).
+- **Retention:** 7 days by default, 30 days while a case is escalated, back to 7 days once closed.
 
 - **Severity is decided in the backend** for the demo (cloud path). The on-phone path arrives later through rule 4 with no API change.
 - **No trip-anomaly rules.** GoTo already records trip anomalies. `POST /trips/{id}/events` only stores GPS and SOS / manual-unsafe events for the timeline map.

@@ -5,6 +5,571 @@
     "version": "0.1.0"
   },
   "paths": {
+    "/me/consent": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Set Consent",
+        "operationId": "set_consent_me_consent_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Consent"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Set Consent Me Consent Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/me/fcm-token": {
+      "post": {
+        "tags": [
+          "me"
+        ],
+        "summary": "Set Fcm Token",
+        "operationId": "set_fcm_token_me_fcm_token_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/FcmToken"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Set Fcm Token Me Fcm Token Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/trips": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Start Trip",
+        "operationId": "start_trip_trips_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/StartTrip"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Start Trip Trips Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/trips/{trip_id}/events": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "Add Events",
+        "operationId": "add_events_trips__trip_id__events_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventBatch"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Add Events Trips  Trip Id  Events Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trips/{trip_id}/end": {
+      "post": {
+        "tags": [
+          "trips"
+        ],
+        "summary": "End Trip",
+        "operationId": "end_trip_trips__trip_id__end_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Trip Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response End Trip Trips  Trip Id  End Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/incidents": {
+      "post": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "Create Incident",
+        "operationId": "create_incident_incidents_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateIncident"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "type": "object",
+                  "title": "Response Create Incident Incidents Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ]
+      }
+    },
+    "/incidents/{incident_id}/finalize": {
+      "post": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "Finalize",
+        "operationId": "finalize_incidents__incident_id__finalize_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "incident_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Incident Id"
+            }
+          }
+        ],
+        "responses": {
+          "202": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Finalize Incidents  Incident Id  Finalize Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/incidents/{incident_id}/open": {
+      "post": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "Open Ticket",
+        "operationId": "open_ticket_incidents__incident_id__open_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "incident_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Incident Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Open Ticket Incidents  Incident Id  Open Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/incidents/{incident_id}/clip-url": {
+      "get": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "Clip Url",
+        "operationId": "clip_url_incidents__incident_id__clip_url_get",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "incident_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Incident Id"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Clip Url Incidents  Incident Id  Clip Url Get"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/incidents/{incident_id}/decision": {
+      "post": {
+        "tags": [
+          "incidents"
+        ],
+        "summary": "Decide",
+        "operationId": "decide_incidents__incident_id__decision_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "incident_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Incident Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Decision"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Decide Incidents  Incident Id  Decision Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/checkins/{checkin_id}/reply": {
+      "post": {
+        "tags": [
+          "checkins"
+        ],
+        "summary": "Reply",
+        "operationId": "reply_checkins__checkin_id__reply_post",
+        "security": [
+          {
+            "HTTPBearer": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "checkin_id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Checkin Id"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Reply"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "additionalProperties": true,
+                  "title": "Response Reply Checkins  Checkin Id  Reply Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/dev/seed": {
       "post": {
         "tags": [
@@ -83,6 +648,318 @@
     }
   },
   "components": {
+    "schemas": {
+      "Consent": {
+        "properties": {
+          "audioConsent": {
+            "type": "boolean",
+            "title": "Audioconsent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "audioConsent"
+        ],
+        "title": "Consent"
+      },
+      "CreateIncident": {
+        "properties": {
+          "tripId": {
+            "type": "string",
+            "title": "Tripid"
+          },
+          "trigger": {
+            "type": "string",
+            "enum": [
+              "sos",
+              "manual_unsafe"
+            ],
+            "title": "Trigger"
+          },
+          "windowStart": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Windowstart"
+          },
+          "windowEnd": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Windowend"
+          },
+          "deviceTranscript": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/TranscriptLine"
+                },
+                "type": "array",
+                "maxItems": 500
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Devicetranscript"
+          },
+          "deviceLabel": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "normal",
+                  "uncomfortable",
+                  "sexual_harassment",
+                  "threat"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Devicelabel"
+          },
+          "deviceScore": {
+            "anyOf": [
+              {
+                "type": "number",
+                "maximum": 1.0,
+                "minimum": 0.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Devicescore"
+          }
+        },
+        "type": "object",
+        "required": [
+          "tripId",
+          "trigger",
+          "windowStart",
+          "windowEnd"
+        ],
+        "title": "CreateIncident"
+      },
+      "Decision": {
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "dismiss",
+              "warn_driver",
+              "suspend_driver",
+              "contact_rider"
+            ],
+            "title": "Action"
+          },
+          "note": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Note",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "action"
+        ],
+        "title": "Decision"
+      },
+      "EventBatch": {
+        "properties": {
+          "events": {
+            "items": {
+              "$ref": "#/components/schemas/TripEvent"
+            },
+            "type": "array",
+            "maxItems": 500,
+            "title": "Events"
+          }
+        },
+        "type": "object",
+        "required": [
+          "events"
+        ],
+        "title": "EventBatch"
+      },
+      "FcmToken": {
+        "properties": {
+          "token": {
+            "type": "string",
+            "maxLength": 4096,
+            "minLength": 1,
+            "title": "Token"
+          }
+        },
+        "type": "object",
+        "required": [
+          "token"
+        ],
+        "title": "FcmToken"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "type": "array",
+            "title": "Detail"
+          }
+        },
+        "type": "object",
+        "title": "HTTPValidationError"
+      },
+      "Reply": {
+        "properties": {
+          "answer": {
+            "type": "string",
+            "enum": [
+              "ok",
+              "need_help"
+            ],
+            "title": "Answer"
+          }
+        },
+        "type": "object",
+        "required": [
+          "answer"
+        ],
+        "title": "Reply"
+      },
+      "StartTrip": {
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": [
+              "goride",
+              "gocar"
+            ],
+            "title": "Mode",
+            "default": "goride"
+          }
+        },
+        "type": "object",
+        "title": "StartTrip"
+      },
+      "TranscriptLine": {
+        "properties": {
+          "start": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "Start"
+          },
+          "end": {
+            "type": "number",
+            "minimum": 0.0,
+            "title": "End"
+          },
+          "text": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Text"
+          }
+        },
+        "type": "object",
+        "required": [
+          "start",
+          "end",
+          "text"
+        ],
+        "title": "TranscriptLine"
+      },
+      "TripEvent": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "gps",
+              "sos",
+              "manual_unsafe"
+            ],
+            "title": "Type"
+          },
+          "lat": {
+            "type": "number",
+            "maximum": 90.0,
+            "minimum": -90.0,
+            "title": "Lat"
+          },
+          "lng": {
+            "type": "number",
+            "maximum": 180.0,
+            "minimum": -180.0,
+            "title": "Lng"
+          },
+          "ts": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ts"
+          },
+          "data": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Data",
+            "default": {}
+          }
+        },
+        "type": "object",
+        "required": [
+          "type",
+          "lat",
+          "lng"
+        ],
+        "title": "TripEvent"
+      },
+      "ValidationError": {
+        "properties": {
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "type": "array",
+            "title": "Location"
+          },
+          "msg": {
+            "type": "string",
+            "title": "Message"
+          },
+          "type": {
+            "type": "string",
+            "title": "Error Type"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "ctx": {
+            "type": "object",
+            "title": "Context"
+          }
+        },
+        "type": "object",
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError"
+      }
+    },
     "securitySchemes": {
       "HTTPBearer": {
         "type": "http",
