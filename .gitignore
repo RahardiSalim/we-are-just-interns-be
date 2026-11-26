@@ -30,3 +30,6 @@ build/
 # android build cache
 .kotlin/
 backend/fixtures/
+
+# Built apps to share by hand, never committed
+/dist/
