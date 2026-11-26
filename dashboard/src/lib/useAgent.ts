@@ -22,5 +22,10 @@ export function useAgent() {
     [],
   );
 
+  // Layout shows the side nav only for a signed-in agent.
+  useEffect(() => {
+    document.documentElement.dataset.auth = user ? "in" : "out";
+  }, [user]);
+
   return { user, notice };
 }

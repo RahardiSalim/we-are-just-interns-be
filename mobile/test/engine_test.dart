@@ -40,24 +40,24 @@ void main() {
       expect(hear('Lewat Sudirman aja ya Pak').action, SafetyAction.none);
     });
 
-    test('an uncomfortable remark warns once, then waits out the cooldown', () {
-      expect(hear('Mbak udah punya pacar belum?').action, SafetyAction.warn);
+    test('each new uncomfortable remark is the next warning; the 3rd counts as high', () {
+      final first = hear('Mbak udah punya pacar belum?');
+      expect((first.action, first.nth), (SafetyAction.warn, 1));
       expect(
-        hear('Tinggal sendiri ya?').action,
+        hear('Oke Pak.').action,
         SafetyAction.none,
-        reason: 'within 10 minutes',
+        reason: 'the same remark still in the window is not a repeat',
       );
-      // 10 minutes later the old line has left the 15 s window, so a new remark is needed
-      expect(
-        hear('Umur berapa sih?', after: const Duration(minutes: 10)).action,
-        SafetyAction.warn,
-      );
+      final second = hear('Tinggal sendiri ya?');
+      expect((second.action, second.nth), (SafetyAction.warn, 2));
+      final third = hear('Umur berapa sih?');
+      expect((third.action, third.nth), (SafetyAction.high, 1));
     });
 
-    test('harassment goes high once per trip, with the window as evidence', () {
+    test('harassment goes high, with the window as evidence, and counts each repeat', () {
       hear('Mbak tinggal sendiri ya?');
       final d = hear('Cantik banget, nanti mampir ke tempat saya.');
-      expect(d.action, SafetyAction.high);
+      expect((d.action, d.nth), (SafetyAction.high, 1));
       expect(d.verdict.label, Label.sexualHarassment);
       expect(d.window.map((l) => l.text), [
         'Mbak tinggal sendiri ya?',
@@ -71,10 +71,12 @@ void main() {
       expect(d.window.last.start, 5);
 
       expect(
-        hear('Ayo cium dulu.').action,
+        hear('Oke Mbak.').action,
         SafetyAction.none,
-        reason: 'the case is already with customer service',
+        reason: 'no new remark',
       );
+      final again = hear('Ayo cium dulu.');
+      expect((again.action, again.nth), (SafetyAction.high, 2));
     });
 
     test('only the last 15 seconds count', () {

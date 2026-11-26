@@ -58,12 +58,16 @@ Each ride has a **share level** that only goes up: **local → at end → live**
 | What happened | You answer | Level | What leaves the phone |
 |---|---|---|---|
 | Nothing | | Local | Nothing. Kept encrypted on the phone 7 days |
-| Warning (medium) | "I'm fine", or ignore it | Local | Nothing. The flag is kept on the phone with the ride |
+| Warning (medium), 1st on the ride | "I'm fine", or ignore it | Local | Nothing. The flag is kept on the phone with the ride |
+| Warning, 2nd on the ride | (a firmer warning) | At end | When the ride ends: every audio piece, the transcript and every flag. No case yet |
+| Warning, 3rd on the ride | | At end | Counts as a high flag (below) |
 | Warning, or any time | **Report driver** (or passenger) → "I'm safe for now" | At end | The report goes now (`manual_unsafe`). When the ride ends: every audio piece, the transcript and every flag |
 | Warning, or any time | **Report driver** → **Yes, get help** | Live | An SOS, and Live (below) |
 | High flag | "I'm okay" | At end | The flag went to an agent at once. When the ride ends: the whole ride |
 | High flag | "I need help" | Live | An SOS, and Live |
 | High flag | no answer | Live at 60 s | See the timeline below |
+| High flag, 2nd on the ride | "Are you still okay?" | Live | The flag joins the same case at once, and the ride goes Live |
+| High flag, 3rd on the ride | (no question) | Live | An SOS on the person's behalf, and Live |
 | Any time | SOS button, the safe phrase, or a shout for help | Live | An SOS, and Live |
 
 **Live** means: at once, every audio piece so far, the transcript and the flags; then a new 10-second piece and the new lines every 10 seconds until the ride ends. The case is marked **LIVE** at the top of the agents' queue, and the agent can listen while the ride goes on.
@@ -162,17 +166,33 @@ How it scores the window:
 
 `SafetyEngine` turns each verdict into one action. It checks in this order:
 
-1. **Already flagged high on this ride?** Then do nothing more. A person at customer service has the case. Warnings stop too.
+1. **Only a new offending line counts.** If the newest line isn't flagged, nothing happens: the same remark staying in the 15 s window is not a repeat.
 2. **High:** the label is `threat` or `sexual_harassment` and the score is at least **0.8**.
-3. **Warning:** any label other than `normal`, a score of at least **0.6**, and no warning in the last **10 minutes**.
+3. **Warning:** any label other than `normal` and a score of at least **0.6**. The **3rd warning** on a ride counts as a high flag.
 4. Otherwise, nothing.
+
+Each decision says which time it is on the ride (`Decision.nth`), and each repeat does more:
+
+### The ladder
+
+What is stored or sent is the **recording** (with its transcript and flags); the person's answers to the pop-ups change nothing here, except "I need help", which is an SOS.
+
+| Step | Pop-up | The recording | Dashboard |
+|---|---|---|---|
+| Nothing | none | Encrypted on the phone, 7 days | Nothing |
+| Warning 1× | "Hey, this conversation seems to be getting uncomfortable…" | On the phone only | Nothing |
+| Warning 2× | "This is the second time…" | Uploaded when the ride ends (the backend accepts a ride with 2+ warnings) | Stored with the trip; no case |
+| Warning 3× | **Are you okay?** | Uploaded when the ride ends | A case at once (`auto`) |
+| High 1× | **Are you okay?** | Uploaded when the ride ends | A case at once (`auto`) |
+| High 2× | **Are you still okay?** | Live: streamed now | The same case again, LIVE |
+| High 3× | none: "We're on it" | Live | An SOS on the same case |
 
 | Setting | Value today | Who sets the real value |
 |---|---|---|
 | Warning threshold | 0.6 | Modelling team, from their test set |
 | High threshold | 0.8 | Modelling team, from their test set |
 | Window | 15 s | Fixed by the design |
-| Warning cooldown | 10 min | Fixed by the design |
+| High after this many warnings | 3 | Fixed by the design |
 
 What that means with the keyword filter:
 
@@ -185,6 +205,16 @@ What that means with the keyword filter:
 | One threat phrase | 0.65 | Warning |
 | Two threat phrases | 0.80 | High |
 
+### Test rides (scenarios)
+
+`lib/engine/scenarios.dart` holds seven test rides built from the real recorded sentences in `stt/dialog_script.csv`: `none`, `warning1`, `warning2`, `warning3`, `high1`, `high2`, `high3`. Each sentence carries the label the model would give it (the CSV's `label` for the person causing trouble; replies are normal), and `ScenarioClassifier` plays that label back, so everything after the model is real: the engine, the pop-ups, what's stored and what's sent.
+
+| Run | How |
+|---|---|
+| On a phone, with the backend and dashboard | `flutter run --dart-define=API_URL=... --dart-define=DEMO_SCRIPT=high2` |
+| In the browser preview (no backend) | `flutter run -d chrome -t lib/preview.dart`, then add `?scenario=high2` to the address |
+| Automated | `flutter test` (group "scenarios" in `test/trip_screen_test.dart`) |
+
 ### The demo conversation, step by step
 
 | Time | Line | What happens |
@@ -193,9 +223,9 @@ What that means with the keyword filter:
 | 6 s | Iya Pak, lewat Sudirman aja. | Nothing |
 | 9 s | Mbak kerja di mana? Udah punya pacar belum? | **Warning** (uncomfortable, 0.65), marked |
 | 12 s | Hmm, Pak, fokus nyetir aja ya. | Nothing |
-| 15 s | Tinggal sendiri ya? Rumahnya di mana? | Nothing (warning cooldown) |
+| 15 s | Tinggal sendiri ya? Rumahnya di mana? | **Warning 2×** (uncomfortable): the recording will be uploaded at the end |
 | 18 s | Cantik banget sih, nanti mampir ke tempat saya dulu. | **High** (sexual harassment, 0.80): flag sent, "Are you okay?" |
-| 21 s | Pak, saya mau turun di depan aja. | Nothing (already flagged) |
+| 21 s | Pak, saya mau turun di depan aja. | Nothing (not an offending line) |
 
 At "End ride", this ride had a high flag, so the full recording uploads with two markers: the warning at 9 s and the high flag at 18 s.
 
@@ -207,6 +237,8 @@ Every message is short and caring, never alarming. All the wording lives in one 
 |---|---|---|
 | Start ride | **Keep this ride safe?** "We'd like to record audio during this ride. It's only reviewed if something seems wrong, and it's deleted after 7 days." | Not now / Yes, record |
 | Warning | "Hey, this conversation seems to be getting uncomfortable. Let's keep it kind. If you feel unsafe, we're right here." | I'm fine / Report |
+| Second warning | "This is the second time the conversation has turned uncomfortable. We'll share this ride's recording with our safety team when it ends. If you feel unsafe, report it now." | I'm fine / Report |
+| Second high flag | **Are you still okay?** "It happened again, so our safety team is now following this ride live. Tap if you need help." | I'm okay / I need help |
 | High flag | **Are you okay?** "Something didn't sound right, so we've let our safety team know. Tap if you need help." | I'm okay / I need help |
 | "I need help" or SOS | "We're on it. Our safety team will contact you right away." | |
 | "I'm okay" | "Glad you're okay. We're still here if anything changes." | |
@@ -221,7 +253,7 @@ Every message is short and caring, never alarming. All the wording lives in one 
 | Screen locked, high flag | Notification **Are you okay?** "Something didn't sound right. Tap to tell us you're okay." Vibration only for 2 minutes, then the alarm sound | Tap opens the app |
 | During the ride | Ongoing notification "GoSafe is keeping this ride safe" | |
 
-These messages appear in a card at the **top** of the screen, never as a pop-up at the bottom: nothing may cover the SOS button. SOS, Report and "End ride" stay pinned at the bottom, and everything above them scrolls.
+The questions (consent, a warning, "Are you okay?", "We've reported…", and "Help is on the way" after an SOS sent on the person's behalf) are **Gojek bottom sheets** (`showGoSheet`): they rise from the bottom edge, the page behind fades, and each carries its own way to get help, so the SOS button is never needed behind them. One at a time: a newer one replaces an open one, but a warning never replaces "Are you okay?". Status messages ("We're on it", "Ride ended…", Live, no signal) stay in a card at the **top** of the sheet. The app opens straight on the ride and asks for recording consent at once. The ride screen is a sheet over a drawn map, as in the Gojek app: drag it down to see the map, up to read everything. SOS sits beside the listening signal in the first screenful; Report and "End ride" are further down the sheet.
 
 ## What the phone sends, and when
 
@@ -250,7 +282,7 @@ Each one is `POST /incidents`, then `POST /incidents/{id}/finalize`, with the ph
 }
 ```
 
-Warnings are **not** sent during the ride. They stay on the phone as markers.
+Warnings are **not** sent during the ride. They stay on the phone as markers; from the 2nd warning the recording (with them) uploads at the end, and the 3rd counts as a high flag (`auto`).
 
 **The recording (at end, or live).** One phone's recording, in pieces:
 
