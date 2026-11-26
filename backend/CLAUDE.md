@@ -1,6 +1,6 @@
 # backend
 
-FastAPI service on Cloud Run. Owns every write to Firestore and Storage, signs upload/read URLs, takes the phone's transcript and label → severity → check-in/escalation, and sends FCM pushes. Speech-to-text and the classifier run on the phones, not here.
+FastAPI service on Cloud Run. Owns every write to Firestore and Storage, signs upload/read URLs, takes the phone's transcript and label → severity → check-in/escalation, sends FCM pushes, and emails the reporter after an SOS and the rider and driver after a decision (`services/mailer.py`). Speech-to-text and the classifier run on the phones, not here.
 
 Follow the root [CLAUDE.md](../CLAUDE.md) rules and [contracts/ARCHITECTURE.md](../contracts/ARCHITECTURE.md).
 
@@ -10,14 +10,14 @@ Follow the root [CLAUDE.md](../CLAUDE.md) rules and [contracts/ARCHITECTURE.md](
 - Config: env vars only (see ARCHITECTURE.md). `/dev/*` routes only when `ENABLE_DEV_ROUTES=true`.
 - Models: speech-to-text and IndoBERT run on the phones. Server-side stand-ins: `services/classify.py` (keyword filter, only when the phone sent no label), `pipeline.transcribe` (returns nothing; the hook for future cloud STT), `pipeline.summarize` (template until Sahabat-AI).
 - Status changes live in `services/pipeline.py` and the API handlers, inside Firestore transactions where two callers can race (finalize, check-in reply vs timeout, open, decision).
-- Tests sit at the HTTP API against the emulator; only token checks, push, and URL signing are faked (`tests/conftest.py`).
+- Tests sit at the HTTP API against the emulator; only token checks, push, email, and URL signing are faked (`tests/conftest.py`).
 
 Commands (from `backend/`, needs `uv`):
 
 | Task | Command |
 |---|---|
 | Install | `uv sync` |
-| Test | `uv run pytest -q` runs the 6 offline tests; the rest skip without the emulators. Full run: from `firebase/`, `firebase emulators:exec --only auth,firestore "cd ../backend && uv run pytest -q"` (wipes emulator data; re-seed after) |
+| Test | `uv run pytest -q` runs the 15 offline tests; the rest skip without the emulators. Full run: from `firebase/`, `firebase emulators:exec --only auth,firestore "cd ../backend && uv run pytest -q"` (wipes emulator data; re-seed after) |
 | Run | `uv run uvicorn app.main:app --reload` |
 | Seed | `SEED_PASSWORD=... uv run python -m scripts.seed` (accounts are `<uid>@gosafe.test`) |
 | Export contract | `uv run python -m scripts.export_openapi` (after any route change; commit `contracts/openapi.json`) |

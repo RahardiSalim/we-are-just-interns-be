@@ -246,6 +246,11 @@ export function CaseView({
                 >
                   {busy ? "Saving…" : "Record decision"}
                 </button>
+                <p className="text-caption text-muted">
+                  {action === "warn_driver" || action === "suspend_driver"
+                    ? "The rider and the driver each get an email about this decision."
+                    : "The rider gets an email about this decision."}
+                </p>
               </div>
             )}
           </Card>
