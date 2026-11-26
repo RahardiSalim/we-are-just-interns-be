@@ -35,8 +35,8 @@ One per ride, however many incidents the ride has. Every incident of the ride re
 
 | Field | Type |
 |---|---|
-| `path` | object key of the audio, `recordings/{tripId}.m4a` (or `.ogg` / `.wav`) |
-| `contentType` | `audio/mp4` \| `audio/ogg` \| `audio/wav` |
+| `path` | object key of the audio, `recordings/{tripId}.aac` (or `.m4a` / `.ogg` / `.wav`) |
+| `contentType` | `audio/aac` (ADTS, what the phone records) \| `audio/mp4` \| `audio/ogg` \| `audio/wav` |
 | `durationSec` | number |
 | `markers` | `[ { at, kind: warning \| high \| sos \| manual_unsafe, label, score, text } ]`: the phone's flags, `at` in seconds from the start of the recording |
 | `transcript` | `[ { at, end, text } ]`: the phone's speech-to-text for the whole ride, seconds from the start |
@@ -107,7 +107,7 @@ Read by: agents. Written by: backend only.
 - Firestore TTL policy on `incidents.deleteAt`.
 - Object storage: a lifecycle rule deletes clips after 7 days (on R2, set it in the bucket's Object Lifecycle Rules).
 - Open cases push `deleteAt` forward.
-- On the phone: the ride recording is deleted after the ride unless it was flagged high or had an SOS, in which case it's uploaded and then deleted from the phone.
+- On the phone: every recorded ride is kept for 7 days, encrypted (30-second audio pieces plus its details), then deleted. Only a ride flagged high or with an SOS is uploaded; the rest never leave the phone.
 
 ## Stretch
 

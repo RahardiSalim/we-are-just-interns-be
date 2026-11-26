@@ -29,17 +29,18 @@ def transcribe(clip_path: str | None) -> list[dict]:
 
 
 def severity(trigger: str, label: str | None) -> str:
-    if trigger == "auto":
-        return "high"  # the phone only reports on its own at the high threshold
+    if trigger in ("auto", "sos"):
+        # auto: the phone only reports on its own at the high threshold. sos: always a person, at once;
+        # a check-in would also ask the driver, which gives away a silent (safe phrase) SOS.
+        return "high"
     if label in ("threat", "sexual_harassment"):
         return "high"
-    if label is None and trigger == "sos":
-        return "high"  # SOS with nothing to judge it by: a person looks at it
     return "medium"  # a person reported it, so never dismiss silently
 
 
 def process(incident_id: str) -> None:
     ref = db().document("incidents", incident_id)
+    inc: dict = {}
     try:
         inc = ref.get().to_dict()
         lines = inc["transcript"] or transcribe(inc["clipPath"])
@@ -56,7 +57,9 @@ def process(incident_id: str) -> None:
             start_checkins(incident_id, inc["tripId"])
     except Exception as e:
         log.exception("processing failed incident=%s", incident_id)
-        ref.update({"status": "failed", "error": str(e)[:500]})
+        # An SOS or high flag must still reach an agent: the queue shows escalated cases, not failed ones.
+        urgent = inc.get("trigger") in ("sos", "auto")
+        ref.update({"status": "escalated" if urgent else "failed", "error": str(e)[:500]})
 
 
 def start_checkins(incident_id: str, trip_id: str) -> None:

@@ -15,7 +15,7 @@ router = APIRouter(prefix="/trips", tags=["trips"])
 
 DEMO_DRIVER = "driver1"  # shortcut: every demo trip gets the seeded driver; real matching is GoTo's job
 Label = Literal["normal", "uncomfortable", "sexual_harassment", "threat"]
-EXTENSIONS = {"audio/mp4": "m4a", "audio/ogg": "ogg", "audio/wav": "wav"}
+EXTENSIONS = {"audio/aac": "aac", "audio/mp4": "m4a", "audio/ogg": "ogg", "audio/wav": "wav"}  # aac: ADTS, what the phone records
 
 
 class StartTrip(BaseModel):
@@ -54,7 +54,7 @@ class Utterance(BaseModel):
 
 class Recording(BaseModel):
     durationSec: float = Field(ge=0, le=6 * 3600)
-    contentType: Literal["audio/mp4", "audio/ogg", "audio/wav"]
+    contentType: Literal["audio/aac", "audio/mp4", "audio/ogg", "audio/wav"]
     markers: list[Marker] = Field(max_length=500)
     transcript: list[Utterance] = Field([], max_length=5000)  # the phone's speech-to-text for the whole ride
 

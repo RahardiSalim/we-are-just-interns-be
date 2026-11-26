@@ -3,6 +3,7 @@ package com.gosafe.gosafe
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
@@ -38,10 +39,17 @@ class MainActivity : FlutterActivity() {
                     Alerts.clear(this)
                     result.success(null)
                 }
-                "encrypt", "decrypt" -> io.execute {
+                "dial" -> {
+                    // ACTION_DIAL fills in the number; the user presses call. Needs no permission.
+                    startActivity(Intent(Intent.ACTION_DIAL, Uri.parse("tel:" + call.argument<String>("number"))))
+                    result.success(null)
+                }
+                "seal", "open" -> io.execute {
                     val path = call.argument<String>("path")!!
-                    runCatching { if (call.method == "encrypt") Vault.encrypt(path) else Vault.decrypt(path) }
-                        .onSuccess { runOnUiThread { result.success(it) } }
+                    runCatching {
+                        if (call.method == "seal") Vault.seal(path, call.argument<ByteArray>("bytes")!!) else Vault.open(path)
+                    }
+                        .onSuccess { runOnUiThread { result.success(if (it is ByteArray) it else null) } }
                         .onFailure { runOnUiThread { result.error("vault", it.message, null) } }
                 }
                 else -> result.notImplemented()

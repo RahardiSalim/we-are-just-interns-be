@@ -13,6 +13,16 @@ const demoConversation = [
   'Pak, saya mau turun di depan aja.',
 ];
 
+/// For demoing the hands-free SOS (`--dart-define=DEMO_SCRIPT=safe_phrase`): nothing rude is said,
+/// the rider just says the safe phrase, and a silent SOS goes out.
+const safePhraseConversation = [
+  'Selamat malam Mbak, sesuai aplikasi ya.',
+  'Iya Pak.',
+  'Mbak, rumahnya sendirian ya? Nanti saya antar sampai dalam.',
+  'Pak, nanti lewat jalan biasa aja ya.',
+  'Iya Mbak.',
+];
+
 Stream<String> scriptedListener({
   List<String> lines = demoConversation,
   Duration gap = const Duration(seconds: 3),

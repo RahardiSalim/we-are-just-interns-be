@@ -15,9 +15,13 @@ abstract final class Ride {
       _ch.invokeMethod('alert', {'title': title, 'body': body, 'loud': loud});
   static Future<void> clearAlert() => _ch.invokeMethod('clearAlert');
 
-  /// AES-GCM with an Android Keystore key. Returns the encrypted file's path; the plain file is deleted.
-  static Future<String> encrypt(String path) async =>
-      (await _ch.invokeMethod<String>('encrypt', {'path': path}))!;
-  static Future<Uint8List> decrypt(String path) async =>
-      (await _ch.invokeMethod<Uint8List>('decrypt', {'path': path}))!;
+  /// Opens the dialer with the number filled in. The user still presses call.
+  static Future<void> dial(String number) =>
+      _ch.invokeMethod('dial', {'number': number});
+
+  /// Writes the bytes encrypted (AES-GCM, Android Keystore key that never leaves the phone).
+  static Future<void> seal(String path, Uint8List bytes) =>
+      _ch.invokeMethod('seal', {'path': path, 'bytes': bytes});
+  static Future<Uint8List> open(String path) async =>
+      (await _ch.invokeMethod<Uint8List>('open', {'path': path}))!;
 }

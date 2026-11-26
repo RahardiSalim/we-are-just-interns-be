@@ -56,9 +56,9 @@ def test_one_trip_per_order_and_only_participants_touch_it(client, login, db):
 def test_after_the_ride_the_full_recording_uploads_with_markers(client, login, db):
     login("rider1")
     client.post("/trips", json={"orderId": "GR-1004", "riderConsent": True})
-    created = client.post("/trips/GR-1004/recording", json={"durationSec": 25.0, "contentType": "audio/mp4", "markers": MARKERS})
+    created = client.post("/trips/GR-1004/recording", json={"durationSec": 25.0, "contentType": "audio/aac", "markers": MARKERS})
     assert created.status_code == 200, created.text
-    assert created.json()["uploadUrl"] == "https://signed.test/PUT/recordings/GR-1004.m4a"
+    assert created.json()["uploadUrl"] == "https://signed.test/PUT/recordings/GR-1004.aac"
 
     rec = db.document("trips", "GR-1004").get().to_dict()["recording"]
     assert (rec["status"], rec["durationSec"]) == ("awaiting_upload", 25.0)
@@ -68,7 +68,7 @@ def test_after_the_ride_the_full_recording_uploads_with_markers(client, login, d
     assert db.document("trips", "GR-1004").get().to_dict()["recording"]["status"] == "uploaded"
 
     login("agent1")
-    assert client.get("/trips/GR-1004/recording-url").json() == {"url": "https://signed.test/GET/recordings/GR-1004.m4a"}
+    assert client.get("/trips/GR-1004/recording-url").json() == {"url": "https://signed.test/GET/recordings/GR-1004.aac"}
     assert [a.get("action") for a in db.collection("auditLogs").get()] == ["view_recording"]
 
 

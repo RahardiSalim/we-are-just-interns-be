@@ -2,11 +2,13 @@ import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
+import 'package:gosafe/engine/safe_phrase.dart';
 import 'package:gosafe/engine/safety_engine.dart';
 import 'package:gosafe/features/safety/are_you_ok.dart';
 import 'package:gosafe/features/trip/trip_screen.dart';
 import 'package:gosafe/services/api.dart';
 import 'package:gosafe/services/recorder.dart';
+import 'package:gosafe/services/ride_store.dart';
 import 'package:material_ui/material_ui.dart';
 
 /// Records calls instead of hitting the backend.
@@ -14,8 +16,11 @@ class FakeApi extends Api {
   FakeApi() : super(token: () async => 't', baseUrl: 'http://fake');
   final calls = <String>[];
   final reports = <(String trigger, Decision? evidence)>[];
-  List<Marker>? uploadedMarkers;
+  List<String>? uploadedMarkers;
   List<String>? uploadedTranscript;
+  Uint8List? uploadedAudio;
+  int failReports = 0; // the next n reports fail, as with no internet
+  int failUploads = 0;
 
   @override
   Future<bool> health() async => true;
@@ -36,20 +41,24 @@ class FakeApi extends Api {
     String trigger,
     Decision? evidence,
   ) async {
+    if (failReports > 0) {
+      failReports--;
+      throw ApiException(0, 'offline');
+    }
     reports.add((trigger, evidence));
     return 'inc-${reports.length}';
   }
 
   @override
-  Future<void> uploadRecording(
-    String tripId,
-    Recording rec,
-    List<Marker> markers,
-    List<(Duration, String)> transcript,
-  ) async {
-    calls.add('upload:$tripId:${rec.contentType}');
-    uploadedMarkers = markers;
-    uploadedTranscript = [for (final (_, t) in transcript) t];
+  Future<void> uploadRecording(RideMeta ride, Uint8List audio) async {
+    if (failUploads > 0) {
+      failUploads--;
+      throw ApiException(0, 'offline');
+    }
+    calls.add('upload:${ride.tripId}:${ride.contentType}');
+    uploadedMarkers = [for (final m in ride.markers) m['kind'] as String];
+    uploadedTranscript = [for (final t in ride.transcript) t['text'] as String];
+    uploadedAudio = audio;
   }
 
   @override
@@ -58,35 +67,39 @@ class FakeApi extends Api {
 }
 
 class FakeRecorder implements TripRecorder {
+  FakeRecorder(this.store);
+  final RideStore store;
   bool allowMic = true;
   String state = 'idle';
 
   @override
-  Future<bool> start() async {
-    if (allowMic) state = 'recording';
-    return allowMic;
+  String get contentType => 'audio/aac';
+
+  @override
+  Future<bool> start(String tripId) async {
+    if (!allowMic) return false;
+    state = 'recording';
+    // Two pieces, as if 30 seconds had passed.
+    await store.addPiece(tripId, 0, Uint8List.fromList([1, 2]));
+    await store.addPiece(tripId, 1, Uint8List.fromList([3, 4]));
+    return true;
   }
 
   @override
-  Future<Recording?> stop() async {
+  Future<Duration> stop() async {
     state = 'stopped';
-    return Recording(
-      () async => Uint8List(4),
-      'audio/mp4',
-      const Duration(seconds: 25),
-    );
+    return const Duration(seconds: 25);
   }
-
-  @override
-  Future<void> discard() async => state = 'discarded';
 }
 
 class Harness {
   final api = FakeApi();
-  final recorder = FakeRecorder();
+  final store = MemoryRideStore();
+  late final recorder = FakeRecorder(store);
   final heard = StreamController<String>();
   final checkins = StreamController<List<String>>();
   final alerts = <String>[];
+  final dialed = <String>[];
   bool driverSafeRide = true;
 
   Future<void> pump(WidgetTester tester) async {
@@ -95,6 +108,7 @@ class Harness {
         home: TripScreen(
           api: api,
           recorder: recorder,
+          store: store,
           listen: () => heard.stream,
           tripInfo: (_) async => (
             riderConsent: api.calls.contains('start:true'),
@@ -104,6 +118,8 @@ class Harness {
           alert: ({required loud}) async =>
               alerts.add(loud ? 'alarm' : 'alert'),
           clearAlert: () async => alerts.add('clear'),
+          dial: (number) async => dialed.add(number),
+          safePhrase: const SafePhrase('Pak, nanti lewat jalan biasa aja ya'),
         ),
       ),
     );
@@ -241,9 +257,15 @@ void main() {
       expect(h.api.calls, [
         'start:true',
         'end:GR-TEST',
-        'upload:GR-TEST:audio/mp4',
+        'upload:GR-TEST:audio/aac',
       ]);
-      expect(h.api.uploadedMarkers!.map((m) => m.kind), ['warning', 'high']);
+      expect(h.api.uploadedMarkers, ['warning', 'high']);
+      expect(h.api.uploadedAudio, [
+        1,
+        2,
+        3,
+        4,
+      ], reason: 'every piece, in order');
       expect(h.api.uploadedTranscript, [
         uncomfortable,
         harassment,
@@ -252,7 +274,7 @@ void main() {
     },
   );
 
-  testWidgets('a ride with only warnings deletes its recording instead', (
+  testWidgets('a ride with only warnings keeps its recording on the phone', (
     tester,
   ) async {
     final h = Harness();
@@ -262,8 +284,72 @@ void main() {
     await h.endRide(tester);
 
     expect(h.api.calls, ['start:true', 'end:GR-TEST'], reason: 'no upload');
-    expect(h.recorder.state, 'discarded');
-    expect(find.textContaining('recording was deleted'), findsOneWidget);
+    final ride = (await h.store.rides()).single;
+    expect(
+      (ride.ended, ride.uploaded, ride.transcript.length),
+      (true, false, 1),
+    );
+    expect(find.text(SafetyText.keptOnPhone), findsOneWidget);
+  });
+
+  testWidgets('a flagged ride recorded offline is sent once there is signal', (
+    tester,
+  ) async {
+    final h = Harness();
+    await h.pump(tester);
+    await h.startRide(tester);
+    await h.say(tester, harassment);
+    await tester.tap(find.text(SafetyText.askOk));
+    await tester.pumpAndSettle();
+    h.api.failUploads = 1;
+    await h.endRide(tester);
+    expect(find.text(SafetyText.recordingQueued), findsOneWidget);
+    expect((await h.store.rides()).single.uploaded, isFalse);
+
+    await tester.pump(const Duration(minutes: 1)); // the next try
+    expect(h.api.calls.last, 'upload:GR-TEST:audio/aac');
+    expect((await h.store.rides()).single.uploaded, isTrue);
+  });
+
+  testWidgets(
+    'a ride the app never ended (killed) is closed and sent at launch',
+    (tester) async {
+      final h = Harness();
+      await h.store.addPiece('GR-OLD', 0, Uint8List.fromList([9]));
+      await h.store.save(
+        RideMeta(
+          tripId: 'GR-OLD',
+          startedAt: DateTime.now().subtract(const Duration(hours: 1)),
+          contentType: 'audio/aac',
+          markers: [
+            {'at': 42.0, 'kind': 'sos'},
+          ],
+        ),
+      );
+      await h.pump(tester);
+      await tester.pump();
+
+      expect(h.api.calls, ['end:GR-OLD', 'upload:GR-OLD:audio/aac']);
+      final ride = (await h.store.rides()).single;
+      expect((ride.ended, ride.uploaded, ride.durationSec), (true, true, 42.0));
+    },
+  );
+
+  testWidgets('rides older than 7 days are deleted, sent or not', (
+    tester,
+  ) async {
+    final h = Harness();
+    await h.store.save(
+      RideMeta(
+        tripId: 'GR-WEEK',
+        startedAt: DateTime.now().subtract(const Duration(days: 8)),
+        contentType: 'audio/aac',
+        ended: true,
+      ),
+    );
+    await h.pump(tester);
+    await tester.pump();
+    expect(await h.store.rides(), isEmpty);
   });
 
   testWidgets('a backend check-in is answered once', (tester) async {
@@ -302,4 +388,43 @@ void main() {
       expect(h.alerts, ['alarm', 'clear', 'alert', 'clear']);
     },
   );
+
+  testWidgets(
+    'SOS offline: offers 112 and keeps trying until it goes through',
+    (tester) async {
+      final h = Harness();
+      await h.pump(tester);
+      await h.startRide(tester);
+      h.api.failReports = 2;
+      await tester.tap(find.text('SOS'));
+      await tester.pump();
+      expect(find.text(SafetyText.sosOffline), findsOneWidget);
+      await tester.tap(find.text(SafetyText.call112));
+      expect(h.dialed, ['112']);
+
+      await tester.pump(
+        const Duration(seconds: 5),
+      ); // second try, still offline
+      expect(h.api.reports, isEmpty);
+      await tester.pump(const Duration(seconds: 10)); // third try goes through
+      expect(h.api.reports.map((r) => r.$1), ['sos']);
+      expect(find.text(SafetyText.helpSent), findsOneWidget);
+      expect(find.text(SafetyText.call112), findsNothing);
+    },
+  );
+
+  testWidgets('the safe phrase sends a silent SOS, once, with no tap', (
+    tester,
+  ) async {
+    final h = Harness();
+    await h.pump(tester);
+    await h.startRide(tester);
+    await h.say(tester, 'Pak nanti lewat jalan biasa saja ya');
+
+    expect(h.api.reports.map((r) => r.$1), ['sos']);
+    expect(find.text(SafetyText.askTitle), findsNothing, reason: 'silent');
+    expect(h.alerts, isEmpty, reason: 'no alarm the driver could hear');
+    await h.say(tester, 'Pak, nanti lewat jalan biasa aja ya.');
+    expect(h.api.reports, hasLength(1), reason: 'once per ride');
+  });
 }
