@@ -22,6 +22,10 @@ abstract interface class TripRecorder {
 
   /// Live: save a piece every 10 seconds instead of 30, so an agent hears it sooner.
   void goLive();
+
+  /// How loud the microphone is right now, 0 (silence) to 1, about 10 times a second while
+  /// recording. Drives the sound signal on the ride screen; nothing is stored or sent.
+  Stream<double> get level;
 }
 
 class MicRecorder implements TripRecorder {
@@ -42,6 +46,12 @@ class MicRecorder implements TripRecorder {
 
   @override
   String get contentType => kIsWeb ? 'audio/wav' : 'audio/aac';
+
+  @override
+  Stream<double> get level => _rec
+      .onAmplitudeChanged(const Duration(milliseconds: 100))
+      // dBFS: quiet room about -50, speech near the phone about -20.
+      .map((a) => ((a.current + 50) / 35).clamp(0.0, 1.0));
 
   @override
   Future<bool> start(String tripId) async {

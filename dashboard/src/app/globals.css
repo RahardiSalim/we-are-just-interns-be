@@ -127,3 +127,11 @@ body {
     animation: none !important;
   }
 }
+
+/* Signed out (or still checking): no side nav, curves span the full width. useAgent flips data-auth. */
+html[data-auth="out"] .app-nav {
+  display: none;
+}
+html[data-auth="out"] .app-curves {
+  width: 100%;
+}

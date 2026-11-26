@@ -1,5 +1,12 @@
 import 'dart:async';
+import 'dart:math' as math;
 
+import 'package:flutter/gestures.dart'
+    show
+        GestureBinding,
+        PointerDeviceKind,
+        PointerScrollEvent,
+        PointerSignalEvent;
 import 'package:material_ui/material_ui.dart';
 
 import '../../engine/safe_phrase.dart';
@@ -9,6 +16,8 @@ import '../../services/recorder.dart';
 import '../../services/ride_store.dart';
 import '../../services/ride_sync.dart';
 import '../../theme.dart';
+import 'gojek_ui.dart';
+import 'ride_map.dart';
 import '../safety/are_you_ok.dart';
 
 typedef TripInfo = ({bool riderConsent, bool driverConsent});
@@ -22,6 +31,34 @@ const _alarmAt = Duration(seconds: 120);
 /// Shouted for help while the alarm rings after an unanswered high flag. Only listened for then,
 /// so "tolong belok kiri" in normal talk does nothing.
 const _helpWords = [SafePhrase('tolong'), SafePhrase('help')];
+
+/// The ride sheet: how far it opens (share of the screen), as in the Gojek app.
+const _sheetMin = 0.3;
+const _sheetStart = 0.55;
+const _sheetMax = 1.0; // slid all the way up, the sheet covers the whole map
+
+/// shortcut: GoSafe has no order details yet (driver, route, fare), so the ride screen shows
+/// Gojek's sample order, with a plate and map made up per ride. Swap in the GoJek order once
+/// `POST /trips` carries it.
+const _demoRide = (
+  driver: 'Galih Pambudi',
+  trips: '120 total trips',
+  rating: '4.5',
+  pickup: 'Hotel Grandhika',
+  dropoff: 'Hotel Grand Kemang',
+  distance: '25 min • 15km',
+  fare: 'Rp85.000',
+);
+
+/// A Jakarta-style plate made up from the ride ("B 1060 JEK"), the same for the same ride.
+String _plate(int seed) {
+  final r = math.Random(seed);
+  final letters = List.generate(
+    3,
+    (_) => String.fromCharCode(65 + r.nextInt(26)),
+  ).join();
+  return 'B ${1000 + r.nextInt(9000)} $letters';
+}
 
 /// The whole ride, on the rider's or the driver's phone: consent, recording, listening, every safety
 /// response, and what leaves the phone and when ([Share]). The phone decides; the backend receives.
@@ -39,6 +76,8 @@ class TripScreen extends StatefulWidget {
     this.dial,
     this.safePhrase,
     this.describe,
+    this.autoStart = false,
+    this.role = 'rider',
   });
 
   final Api api;
@@ -69,24 +108,34 @@ class TripScreen extends StatefulWidget {
   /// A note shown under each heard line, e.g. the dev classifier's raw label. Null shows nothing.
   final String? Function(String line)? describe;
 
+  /// Open straight on the ride (the GoJek order) and ask for consent at once, with no home screen.
+  /// The app does; tests leave it off to drive the home screen.
+  final bool autoStart;
+
+  /// 'rider' or 'driver'. shortcut: one app for both phones in the demo.
+  final String role;
+
   @override
   State<TripScreen> createState() => _TripScreenState();
 }
 
 class _TripScreenState extends State<TripScreen> {
   // shortcut: the rider/driver switch is for the demo; in production they're two apps.
-  String _role = 'rider';
+  late String _role = widget.role;
+  Stream<double>? _micLevel; // the microphone's loudness while recording
   bool _safeRide = true; // the driver's setting: record my rides
   String? _tripId;
   bool _recording = false;
   bool? _driverSafeRide;
   bool? _backendUp;
   bool _busy = false;
-  bool _warning = false;
+  // The safety pop-up on screen (a warning, "Are you okay?", "We've reported…"): one at a time,
+  // a newer one replaces it. [_popup] counts them, so a replaced one's answer is ignored.
+  int _popup = 0;
+  bool _popupOpen = false;
   bool _sosOffline = false;
   bool _safePhraseUsed = false;
   late SafePhrase? _phrase = widget.safePhrase; // the user's own once loaded
-  bool _asking = false; // "Are you okay?" is open
   bool _shout = false; // the alarm rings: listening for "tolong"
   bool _live = false;
   String? _notice;
@@ -103,12 +152,20 @@ class _TripScreenState extends State<TripScreen> {
   Decision? _last;
   late SafetyEngine _engine;
   StreamSubscription<String>? _listening;
+  final _sheet = DraggableScrollableController();
+  final _mapView = TransformationController(); // the map's pan and zoom
+  double _extent = _sheetStart;
 
   bool get _driver => _role == 'driver';
 
   @override
   void initState() {
     super.initState();
+    if (widget.autoStart) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _startRide();
+      });
+    }
     widget.api.health().then(
       (up) => mounted ? setState(() => _backendUp = up) : null,
     );
@@ -129,6 +186,8 @@ class _TripScreenState extends State<TripScreen> {
     _retry?.cancel();
     _highCheck?.cancel();
     _liveTimer?.cancel();
+    _sheet.dispose();
+    _mapView.dispose();
     super.dispose();
   }
 
@@ -186,6 +245,7 @@ class _TripScreenState extends State<TripScreen> {
         _tripId = tripId;
         _safePhraseUsed = _live = false;
         _recording = micOn;
+        _micLevel = micOn ? widget.recorder.level : null;
         _driverSafeRide = trip?.driverConsent;
         _rideStart = DateTime.now();
         _notice = both && !micOn
@@ -229,7 +289,7 @@ class _TripScreenState extends State<TripScreen> {
       }
       setState(() {
         _tripId = _last = _ride = null;
-        _recording = _warning = _live = false;
+        _recording = _live = false;
       });
     });
     if (mounted) setState(() => _busy = false);
@@ -327,17 +387,30 @@ class _TripScreenState extends State<TripScreen> {
       _sos();
       return;
     }
+    // The ladder (mobile/README.md): each repeat does more with the recording.
     switch (d.action) {
       case SafetyAction.warn:
         _mark(Marker(at, 'warning', verdict: d.verdict, text: text));
-        setState(() => _warning = true);
+        // 1st: stays on the phone. 2nd: the whole recording goes to the safety team at the end.
+        if (d.nth >= 2) _raise(Share.atEnd);
+        // A warning never replaces an open "Are you okay?": that question matters more.
+        if (_highCheck != null || _shout) break;
+        _showPopup(() => askWarning(context, again: d.nth >= 2)).then((r) {
+          if (r.$1 && r.$2 == true) _reportOther();
+        });
       case SafetyAction.high:
         _mark(Marker(at, 'high', verdict: d.verdict, text: text));
-        _raise(
-          Share.atEnd,
-        ); // suspicion is high: the whole ride goes to the team at the end
-        _deliver('auto', d); // and the flag goes to an agent at once
-        _startHighCheck();
+        _raise(Share.atEnd); // the whole ride goes to the team at the end
+        if (d.nth >= 3) {
+          _sos(announce: true); // 3rd: an SOS on the rider's behalf, Live
+          return;
+        }
+        _deliver(
+          'auto',
+          d,
+        ); // the flag reaches an agent at once (a repeat joins the same case)
+        if (d.nth == 2) _goLive(); // 2nd: an agent can listen now
+        _startHighCheck(again: d.nth == 2);
       case SafetyAction.none:
         break;
     }
@@ -345,7 +418,8 @@ class _TripScreenState extends State<TripScreen> {
 
   /// "Are you okay?" after a high flag, quiet first: buzz every 10 s, Live at 60 s, alarm and
   /// "shout TOLONG" at 120 s.
-  void _startHighCheck() {
+  void _startHighCheck({bool again = false}) {
+    _endHighCheck();
     var waited = Duration.zero;
     widget.alert?.call(loud: false);
     _highCheck = Timer.periodic(_pulse, (timer) {
@@ -359,9 +433,10 @@ class _TripScreenState extends State<TripScreen> {
         widget.alert?.call(loud: false); // another buzz
       }
     });
-    _asking = true;
-    askAreYouOk(context).then((ok) {
-      _asking = false;
+    _showPopup(() => askAreYouOk(context, again: again)).then((r) {
+      final (current, ok) = r;
+      // Replaced by a newer pop-up, which handles the check.
+      if (!current) return;
       _endHighCheck();
       if (ok == true) _say(SafetyText.okThanks);
       if (ok == false) _sos();
@@ -376,13 +451,39 @@ class _TripScreenState extends State<TripScreen> {
     if (mounted && _shout) setState(() => _shout = false);
   }
 
+  /// Shows a safety pop-up, closing any open one first. Returns whether it was still the current
+  /// one when it closed (a replaced pop-up's answer means nothing) and the answer.
+  Future<(bool, T?)> _showPopup<T>(Future<T?> Function() open) async {
+    _closePopup();
+    final me = ++_popup;
+    _popupOpen = true;
+    final answer = await open();
+    if (me != _popup) return (false, null);
+    _popupOpen = false;
+    return (true, answer);
+  }
+
+  void _closePopup() {
+    if (!_popupOpen) return;
+    _popup++; // the closing one must not act
+    _popupOpen = false;
+    Navigator.of(context).pop();
+  }
+
   /// SOS button, "I need help", "Yes, get help", the safe phrase, or a shout for help.
-  Future<void> _sos() async {
-    if (_asking) Navigator.of(context).pop(); // close "Are you okay?"
+  /// [announce]: sent on the person's behalf (the 3rd high flag), so say so in a pop-up.
+  Future<void> _sos({bool announce = false}) async {
+    if (_tripId == null) return; // the ride is still starting
+    _closePopup();
     _endHighCheck();
     _mark(Marker(_sinceStart, 'sos', verdict: _last?.verdict));
     _goLive();
-    if (await _deliver('sos', _last) && mounted) _say(SafetyText.helpSent);
+    if (!await _deliver('sos', _last) || !mounted) return;
+    if (announce) {
+      _showPopup(() => showHelpSent(context));
+    } else {
+      _say(SafetyText.helpSent);
+    }
   }
 
   Future<void> _editSafePhrase() async {
@@ -395,11 +496,14 @@ class _TripScreenState extends State<TripScreen> {
 
   /// "Report driver" / "Report passenger": the team reviews the whole ride after it ends.
   Future<void> _reportOther() async {
-    setState(() => _warning = false);
+    if (_tripId == null) return;
     _mark(Marker(_sinceStart, 'manual_unsafe', verdict: _last?.verdict));
     _raise(Share.atEnd);
     _deliver('manual_unsafe', _last);
-    final help = await askNeedHelp(context, driver: _driver);
+    final (current, help) = await _showPopup(
+      () => askNeedHelp(context, driver: _driver),
+    );
+    if (!current) return;
     if (help == true) {
       await _sos();
     } else if (help == false && mounted) {
@@ -435,267 +539,726 @@ class _TripScreenState extends State<TripScreen> {
     final text = Theme.of(context).textTheme;
     final onRide = _tripId != null;
 
+    // Alerts sit at the top, never over the bottom buttons (nothing may cover SOS).
+    List<Widget> alerts() => [
+      if (_sosOffline)
+        AlertCard(
+          icon: Icons.signal_cellular_off_rounded,
+          color: GoSafeColors.high,
+          tint: GoSafeColors.highTint,
+          text: SafetyText.sosOffline,
+          actions: [
+            if (widget.dial != null)
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: GoSafeColors.high,
+                  minimumSize: const Size(0, 44),
+                ),
+                onPressed: () => widget.dial!('112'),
+                child: const Text(SafetyText.call112),
+              ),
+          ],
+        ),
+      if (_shout)
+        const AlertCard(
+          icon: Icons.campaign_rounded,
+          color: GoSafeColors.high,
+          tint: GoSafeColors.highTint,
+          text: SafetyText.shout,
+        ),
+      if (_live)
+        const AlertCard(
+          icon: Icons.support_agent_rounded,
+          color: GoSafeColors.high,
+          tint: GoSafeColors.highTint,
+          text: SafetyText.live,
+        ),
+      if (_message != null)
+        AlertCard(
+          icon: Icons.favorite_rounded,
+          text: _message!,
+          trailing: IconButton(
+            icon: const Icon(Icons.close_rounded),
+            tooltip: 'Dismiss',
+            onPressed: () => setState(() => _message = null),
+          ),
+        ),
+      if (_notice != null)
+        AlertCard(
+          icon: Icons.info_rounded,
+          color: GoSafeColors.high,
+          tint: GoSafeColors.highTint,
+          text: _notice!,
+        ),
+    ];
+
+    if (onRide || widget.autoStart) {
+      return Scaffold(
+        backgroundColor: GoSafeColors.mapBg,
+        body: _rideView(text, alerts()),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('GoSafe'),
+        toolbarHeight: 64,
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          spacing: 8,
+          children: [
+            Container(
+              width: 32,
+              height: 32,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.verified_user_rounded,
+                color: GoSafeColors.brand,
+                size: 20,
+              ),
+            ),
+            const Text('GoSafe'),
+          ],
+        ),
         actions: [
           Padding(
-            padding: const EdgeInsets.only(right: 12),
-            child: Chip(
-              label: Text(switch (_backendUp) {
-                null => 'Checking…',
-                true => 'Online',
-                false => 'Offline',
-              }),
+            padding: const EdgeInsets.only(right: 16),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                spacing: 6,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: switch (_backendUp) {
+                        true => GoSafeColors.brand,
+                        false => GoSafeColors.high,
+                        null => GoSafeColors.muted,
+                      },
+                    ),
+                  ),
+                  Text(
+                    switch (_backendUp) {
+                      null => 'Checking…',
+                      true => 'Online',
+                      false => 'Offline',
+                    },
+                    style: GoSafeType.caption.copyWith(
+                      fontWeight: FontWeight.w700,
+                      color: GoSafeColors.ink,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
         ],
       ),
       body: SafeArea(
-        // Everything scrolls except the bottom buttons, so SOS is always on screen.
+        // Everything scrolls except the Start ride button.
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
             Expanded(
               child: ListView(
+                padding: const EdgeInsets.only(top: 16),
                 children: [
-                  if (_sosOffline)
-                    MaterialBanner(
-                      backgroundColor: GoSafeColors.highTint,
-                      leading: const Icon(Icons.signal_cellular_off),
-                      content: const Text(SafetyText.sosOffline),
-                      actions: [
-                        if (widget.dial != null)
-                          FilledButton(
-                            style: FilledButton.styleFrom(
-                              backgroundColor: GoSafeColors.high,
-                              minimumSize: const Size(0, 48),
-                            ),
-                            onPressed: () => widget.dial!('112'),
-                            child: const Text(SafetyText.call112),
+                  ...alerts(),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+                    child: Image.asset(
+                      'assets/illustrations/listening.png',
+                      height: 180,
+                      semanticLabel: 'GoSafe listens during your ride',
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
+                    child: Column(
+                      spacing: 8,
+                      children: [
+                        Text(
+                          'Ride with peace of mind',
+                          style: text.titleLarge,
+                          textAlign: TextAlign.center,
+                        ),
+                        Text(
+                          'GoSafe listens for trouble during your ride and gets help fast if you need it.',
+                          textAlign: TextAlign.center,
+                          style: text.bodyMedium?.copyWith(
+                            color: GoSafeColors.muted,
                           ),
-                      ],
-                    ),
-                  if (_shout)
-                    MaterialBanner(
-                      backgroundColor: GoSafeColors.highTint,
-                      leading: const Icon(Icons.campaign),
-                      content: const Text(SafetyText.shout),
-                      actions: const [SizedBox.shrink()],
-                    ),
-                  if (_live)
-                    MaterialBanner(
-                      backgroundColor: GoSafeColors.highTint,
-                      leading: const Icon(Icons.support_agent),
-                      content: const Text(SafetyText.live),
-                      actions: const [SizedBox.shrink()],
-                    ),
-                  if (onRide)
-                    MaterialBanner(
-                      leading: Icon(
-                        _recording ? Icons.mic : Icons.mic_off,
-                        color: _recording ? GoSafeColors.high : null,
-                      ),
-                      content: Text(
-                        _recording
-                            ? 'Recording on. Only shared if something serious happens.'
-                            : 'Not recording this ride. SOS still works.',
-                      ),
-                      actions: const [SizedBox.shrink()],
-                    ),
-                  if (_warning)
-                    MaterialBanner(
-                      backgroundColor: GoSafeColors.warnTint,
-                      leading: const Icon(Icons.volunteer_activism),
-                      content: const Text(SafetyText.warning),
-                      actions: [
-                        TextButton(
-                          onPressed: () => setState(() => _warning = false),
-                          child: const Text(SafetyText.warningFine),
-                        ),
-                        TextButton(
-                          onPressed: _reportOther,
-                          child: const Text(SafetyText.warningReport),
                         ),
                       ],
                     ),
-                  if (_message != null)
-                    Card(
-                      margin: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-                      child: ListTile(
-                        leading: const Icon(Icons.favorite_outline),
-                        title: Text(_message!),
-                        trailing: IconButton(
-                          icon: const Icon(Icons.close),
-                          tooltip: 'Dismiss',
-                          onPressed: () => setState(() => _message = null),
+                  ),
+                  // shortcut: one app for both phones in the demo; in production they're two apps.
+                  // Fixed width: the app font loads after first layout, which would wrap "Driver".
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.only(bottom: 16),
+                      child: SizedBox(
+                        width: 320,
+                        child: SegmentedButton<String>(
+                          showSelectedIcon: false,
+                          segments: const [
+                            ButtonSegment(
+                              value: 'rider',
+                              label: Text('Rider'),
+                              icon: Icon(Icons.person_rounded),
+                            ),
+                            ButtonSegment(
+                              value: 'driver',
+                              label: Text('Driver'),
+                              icon: Icon(Icons.two_wheeler_rounded),
+                            ),
+                          ],
+                          selected: {_role},
+                          onSelectionChanged: (v) =>
+                              setState(() => _role = v.single),
                         ),
                       ),
                     ),
-                  if (_notice != null)
-                    Padding(
-                      padding: const EdgeInsets.all(16),
-                      child: Text(
-                        _notice!,
-                        style: TextStyle(color: GoSafeColors.high),
-                      ),
-                    ),
-                  if (onRide) ...[
-                    ListTile(
-                      leading: Icon(
-                        _driverSafeRide == true
-                            ? Icons.verified_user
-                            : Icons.shield_outlined,
-                      ),
-                      title: Text('Ride $_tripId'),
-                      subtitle: Text(
-                        _driverSafeRide == true
-                            ? 'Your driver has Safe Ride on'
-                            : "Your driver hasn't turned on Safe Ride",
-                      ),
-                    ),
-                    Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 16),
-                      child: Text(
-                        widget.describe == null
-                            ? 'Heard (temporary speech-to-text)'
-                            : 'Heard (Whisper on the laptop · classifier label)',
-                        style: text.labelMedium,
-                      ),
-                    ),
-                    for (final (i, (_, t)) in _heard.indexed)
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 16),
-                        child: Text.rich(
-                          TextSpan(
-                            text: t,
+                  ),
+                  // Both rider and driver have their own: on a motorbike either may be unable to tap.
+                  GoCard(
+                    child: Row(
+                      spacing: 12,
+                      children: [
+                        const CircleIcon(Icons.record_voice_over_rounded),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (widget.describe?.call(t) case final note?)
-                                TextSpan(
-                                  text: '   $note',
-                                  style: text.labelMedium?.copyWith(
-                                    color: GoSafeColors.muted,
-                                  ),
+                              Text(
+                                SafetyText.safePhraseTitle,
+                                style: text.titleSmall,
+                              ),
+                              Text(
+                                _phrase == null
+                                    ? 'Not set'
+                                    : '“${_phrase!.phrase}”',
+                                style: text.bodySmall?.copyWith(
+                                  color: GoSafeColors.muted,
                                 ),
+                              ),
                             ],
                           ),
-                          key: ValueKey('heard-$i'),
-                          style: text.bodySmall,
                         ),
-                      ),
-                  ] else
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(24, 96, 24, 24),
-                      child: Column(
-                        spacing: 16,
-                        children: [
-                          Icon(
-                            Icons.verified_user,
-                            size: 64,
-                            color: GoSafeColors.brand,
-                          ),
-                          Text(
-                            'Ride with peace of mind',
-                            style: text.titleLarge,
-                            textAlign: TextAlign.center,
-                          ),
-                          const Text(
-                            'GoSafe listens for trouble during your ride and gets help fast if you need it.',
-                            textAlign: TextAlign.center,
-                          ),
-                          // shortcut: one app for both phones in the demo; in production they're two apps.
-                          // Fixed width: the app font loads after first layout, which would wrap "Driver".
-                          SizedBox(
-                            width: 320,
-                            child: SegmentedButton<String>(
-                              showSelectedIcon: false,
-                              segments: const [
-                                ButtonSegment(
-                                  value: 'rider',
-                                  label: Text('Rider'),
-                                  icon: Icon(Icons.person),
-                                ),
-                                ButtonSegment(
-                                  value: 'driver',
-                                  label: Text('Driver'),
-                                  icon: Icon(Icons.two_wheeler),
-                                ),
-                              ],
-                              selected: {_role},
-                              onSelectionChanged: (v) =>
-                                  setState(() => _role = v.single),
+                        OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 36),
+                            padding: const EdgeInsets.symmetric(horizontal: 16),
+                            side: const BorderSide(
+                              color: GoSafeColors.brandStrong,
                             ),
+                            foregroundColor: GoSafeColors.brandDeep,
                           ),
-                          // Both rider and driver have their own: on a motorbike either may be unable to tap.
-                          ListTile(
-                            leading: const Icon(Icons.record_voice_over),
-                            title: const Text(SafetyText.safePhraseTitle),
-                            subtitle: Text(
-                              _phrase == null
-                                  ? 'Not set'
-                                  : '“${_phrase!.phrase}”',
-                            ),
-                            trailing: TextButton(
-                              onPressed: _editSafePhrase,
-                              child: Text(_phrase == null ? 'Set' : 'Change'),
-                            ),
-                          ),
-                          if (_driver)
-                            SwitchListTile(
-                              title: const Text('Safe Ride'),
-                              subtitle: const Text(SafetyText.safeRideSetting),
-                              value: _safeRide,
-                              onChanged: (v) => setState(() => _safeRide = v),
-                            ),
-                        ],
+                          onPressed: _editSafePhrase,
+                          child: Text(_phrase == null ? 'Set' : 'Change'),
+                        ),
+                      ],
+                    ),
+                  ),
+                  if (_driver)
+                    GoCard(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: SwitchListTile(
+                        secondary: const CircleIcon(
+                          Icons.verified_user_rounded,
+                        ),
+                        title: const Text('Safe Ride'),
+                        subtitle: const Text(SafetyText.safeRideSetting),
+                        value: _safeRide,
+                        onChanged: (v) => setState(() => _safeRide = v),
                       ),
                     ),
                 ],
               ),
             ),
-            Padding(
-              padding: const EdgeInsets.all(16),
-              child: onRide
-                  ? Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      spacing: 12,
-                      children: [
-                        OutlinedButton(
-                          onPressed: _reportOther,
-                          child: Text(SafetyText.reportButton(driver: _driver)),
-                        ),
-                        FilledButton(
-                          style: FilledButton.styleFrom(
-                            backgroundColor: GoSafeColors.sos,
-                            foregroundColor: Colors.white,
-                            minimumSize: const Size.fromHeight(64),
-                          ),
-                          onPressed: _sos,
-                          child: const Text(
-                            'SOS',
-                            style: TextStyle(
-                              fontSize: 22,
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                        ),
-                        TextButton(
-                          onPressed: _busy ? null : _endRide,
-                          child: const Text('End ride'),
-                        ),
-                      ],
-                    )
-                  : FilledButton(
-                      style: FilledButton.styleFrom(
-                        minimumSize: const Size.fromHeight(56),
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+              decoration: const BoxDecoration(
+                color: GoSafeColors.canvas,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+                boxShadow: GoSafeShadow.high,
+              ),
+              child: FilledButton(
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size.fromHeight(56),
+                  padding: const EdgeInsets.only(left: 24, right: 8),
+                ),
+                onPressed: _busy ? null : _startRide,
+                child: Row(
+                  children: [
+                    const Expanded(child: Text('Start ride')),
+                    Container(
+                      width: 40,
+                      height: 40,
+                      decoration: const BoxDecoration(
+                        color: Colors.white,
+                        shape: BoxShape.circle,
                       ),
-                      onPressed: _busy ? null : _startRide,
-                      child: const Text('Start ride'),
+                      child: const Icon(
+                        Icons.arrow_forward_rounded,
+                        color: GoSafeColors.brandStrong,
+                      ),
                     ),
+                  ],
+                ),
+              ),
             ),
           ],
         ),
       ),
+    );
+  }
+
+  /// The ride, laid out like Gojek's ride screen: the map behind, and a white sheet the rider drags
+  /// up to read everything or down to see the map. Alerts sit at the top of the sheet; SOS is in the
+  /// first screenful, beside the listening signal.
+  Widget _rideView(TextTheme text, List<Widget> alerts) => LayoutBuilder(
+    builder: (context, box) {
+      final h = box.maxHeight;
+      return Stack(
+        children: [
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: h * (1 - _sheetMin) + 24,
+            child: RideMap(
+              view: _mapView,
+              seed: _seed,
+              // The route sits in the part of the map the sheet leaves open when the ride starts.
+              focus: Rect.fromLTRB(
+                0.15,
+                0.1,
+                0.85,
+                ((1 - _sheetStart) * h - 70) / (h * (1 - _sheetMin) + 24),
+              ),
+            ),
+          ),
+          Positioned(
+            left: 16,
+            right: 16,
+            bottom: h * _extent + 60,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const MapButton(Icons.arrow_back_rounded, tooltip: 'Back'),
+                // Navigate: back to the whole route, as it was when the ride started.
+                MapButton(
+                  Icons.near_me_rounded,
+                  color: GoSafeColors.mapDot,
+                  tooltip: 'Show my route',
+                  onPressed: () {
+                    _mapView.value = Matrix4.identity();
+                    _sheet.animateTo(
+                      _sheetStart,
+                      duration: const Duration(milliseconds: 300),
+                      curve: Curves.easeOutCubic,
+                    );
+                  },
+                ),
+              ],
+            ),
+          ),
+          NotificationListener<DraggableScrollableNotification>(
+            onNotification: (n) {
+              setState(() => _extent = n.extent);
+              return false;
+            },
+            child: DraggableScrollableSheet(
+              controller: _sheet,
+              initialChildSize: _sheetStart,
+              minChildSize: _sheetMin,
+              maxChildSize: _sheetMax,
+              snap: true,
+              snapSizes: const [_sheetStart],
+              // Drag with a finger, and with a mouse or trackpad too (Flutter allows only touch by
+              // default), so the sheet also slides in the browser preview.
+              builder: (context, scroll) => ScrollConfiguration(
+                behavior: ScrollConfiguration.of(context)
+                    .copyWith(dragDevices: PointerDeviceKind.values.toSet()),
+                child: SingleChildScrollView(
+                  controller: scroll,
+                  child: Listener(
+                    onPointerSignal: (e) => _wheel(e, scroll, h),
+                    child: Stack(
+                      children: [
+                        const EtaBanner(
+                          text: 'Your driver will arrive in',
+                          highlight: '5 min',
+                        ),
+                        Container(
+                          margin: const EdgeInsets.only(top: 56),
+                          padding: const EdgeInsets.only(top: 10, bottom: 24),
+                          decoration: const BoxDecoration(
+                            color: GoSafeColors.canvas,
+                            borderRadius: BorderRadius.vertical(
+                              top: Radius.circular(24),
+                            ),
+                          ),
+                          child: _rideSheet(text, alerts),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      );
+    },
+  );
+
+  /// A mouse wheel or trackpad over the sheet moves the sheet first, as a finger drag does: up
+  /// until it covers the map, then the cards scroll; back down, the cards return to the top
+  /// first, then the sheet lowers. Without this the cards scroll inside a half-open sheet.
+  void _wheel(PointerSignalEvent e, ScrollController scroll, double h) {
+    if (e is! PointerScrollEvent || !_sheet.isAttached) return;
+    final dy = e.scrollDelta.dy;
+    final size = _sheet.size;
+    final atTop = !scroll.hasClients || scroll.offset <= 0;
+    final grow = dy > 0 && size < _sheetMax;
+    final shrink = dy < 0 && atTop && size > _sheetMin;
+    if (!grow && !shrink) return; // the cards scroll as usual
+    GestureBinding.instance.pointerSignalResolver.register(e, (_) {
+      _sheet.jumpTo((size + dy / h).clamp(_sheetMin, _sheetMax));
+    });
+  }
+
+  /// The same ride always gets the same plate and map.
+  int get _seed => (_tripId ?? '').hashCode & 0x7fffffff;
+
+  Widget _rideSheet(TextTheme text, List<Widget> alerts) {
+    const ride = _demoRide;
+    final onRide = _tripId != null;
+    final title = text.titleSmall?.copyWith(fontWeight: FontWeight.w700);
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Center(
+          child: Container(
+            width: 40,
+            height: 4,
+            margin: const EdgeInsets.only(bottom: 16),
+            decoration: BoxDecoration(
+              color: GoSafeColors.handle,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+        ),
+        ...alerts,
+        // Plate number, call and chat.
+        GoCard(
+          padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
+          child: Row(
+            spacing: 12,
+            children: [
+              Expanded(child: Text(onRide ? _plate(_seed) : '…', style: title)),
+              const RoundAction(Icons.call_rounded, tooltip: 'Call'),
+              const RoundAction(Icons.chat_rounded, tooltip: 'Chat'),
+            ],
+          ),
+        ),
+        // GoRide: pickup and drop-off joined by dots.
+        GoCard(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                spacing: 16,
+                children: [
+                  const CircleIcon(
+                    Icons.moped_rounded,
+                    color: Colors.white,
+                    tint: GoSafeColors.rideIcon,
+                    size: 28,
+                  ),
+                  Text('GoRide', style: title),
+                ],
+              ),
+              const DottedLine(),
+              InfoRow(
+                icon: Icons.arrow_upward_rounded,
+                color: GoSafeColors.rideIcon,
+                label: 'Pickup location',
+                value: ride.pickup,
+              ),
+              DotConnector(note: ride.distance),
+              InfoRow(
+                icon: Icons.radio_button_checked_rounded,
+                color: GoSafeColors.dropoff,
+                label: 'Drop off location',
+                value: ride.dropoff,
+                trailing: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 18),
+                    side: const BorderSide(
+                      color: GoSafeColors.ride,
+                      width: 1.5,
+                    ),
+                    foregroundColor: GoSafeColors.ride,
+                  ),
+                  onPressed: () {},
+                  child: const Text('Edit'),
+                ),
+              ),
+            ],
+          ),
+        ),
+        // GoPay.
+        GoCard(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+          child: Row(
+            spacing: 16,
+            children: [
+              const CircleIcon(
+                Icons.account_balance_wallet_rounded,
+                color: Colors.white,
+                tint: GoSafeColors.gopay,
+                size: 28,
+              ),
+              Expanded(child: Text('GoPay', style: text.titleSmall)),
+              Text(ride.fare, style: title),
+            ],
+          ),
+        ),
+        // GoSafe: the small speaker with its live signal, and SOS beside it.
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+          child: IntrinsicHeight(
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              spacing: 12,
+              children: [
+                Expanded(
+                  child: GoCard(
+                    margin: EdgeInsets.zero,
+                    padding: const EdgeInsets.fromLTRB(14, 12, 14, 12),
+                    child: ListeningLine(
+                      recording: _recording,
+                      level: _micLevel,
+                      text: _recording
+                          ? 'Recording on. Only shared if something serious happens.'
+                          : 'Not recording this ride. SOS still works.',
+                    ),
+                  ),
+                ),
+                SosButton(onPressed: _sos),
+              ],
+            ),
+          ),
+        ),
+        // The driver: name, trips, Safe Ride, photo with rating.
+        GoCard(
+          padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
+          child: Row(
+            spacing: 12,
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  spacing: 8,
+                  children: [
+                    Text(ride.driver, style: title),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 6,
+                      children: [
+                        Pill(
+                          ride.trips,
+                          color: GoSafeColors.muted,
+                          border: GoSafeColors.lineSoft,
+                        ),
+                        Pill(
+                          _driverSafeRide == true
+                              ? 'Your driver has Safe Ride on'
+                              : "Your driver hasn't turned on Safe Ride",
+                          icon: _driverSafeRide == true
+                              ? Icons.verified_user_rounded
+                              : Icons.shield_outlined,
+                          color: _driverSafeRide == true
+                              ? GoSafeColors.brandDeep
+                              : GoSafeColors.muted,
+                          tint: _driverSafeRide == true
+                              ? GoSafeColors.brandTint
+                              : GoSafeColors.canvas,
+                          border: _driverSafeRide == true
+                              ? GoSafeColors.brandTint
+                              : GoSafeColors.lineSoft,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              DriverPhoto(asset: 'assets/ride/driver.png', rating: ride.rating),
+            ],
+          ),
+        ),
+        // Report and End ride; once the ride ended, start the next one here.
+        GoCard(
+          padding: const EdgeInsets.all(12),
+          child: !onRide
+              ? FilledButton(
+                  onPressed: _busy ? null : _startRide,
+                  child: const Text('Start ride'),
+                )
+              : Row(
+                  spacing: 8,
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: const Icon(Icons.flag_rounded),
+                        onPressed: _reportOther,
+                        label: Text(SafetyText.reportButton(driver: _driver)),
+                      ),
+                    ),
+                    TextButton(
+                      onPressed: _busy ? null : _endRide,
+                      child: const Text('End ride'),
+                    ),
+                  ],
+                ),
+        ),
+        // The home screen is gone in the app, so the safe phrase is set here.
+        if (widget.autoStart)
+          GoCard(
+            padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+            child: Row(
+              spacing: 12,
+              children: [
+                const CircleIcon(Icons.record_voice_over_rounded, size: 32),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(SafetyText.safePhraseTitle, style: text.titleSmall),
+                      Text(
+                        _phrase == null ? 'Not set' : '“${_phrase!.phrase}”',
+                        style: text.bodySmall?.copyWith(
+                          color: GoSafeColors.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 36),
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    side: const BorderSide(
+                      color: GoSafeColors.ride,
+                      width: 1.5,
+                    ),
+                    foregroundColor: GoSafeColors.ride,
+                  ),
+                  onPressed: _editSafePhrase,
+                  child: Text(_phrase == null ? 'Set' : 'Change'),
+                ),
+              ],
+            ),
+          ),
+        // What was heard is for the safety team, not the rider. Shown only in the developer mode
+        // (DEV_ML), to check the classifier.
+        if (widget.describe != null) ...[
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+            child: Text(
+              'Heard on this ride',
+              style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+            child: Text(
+              widget.describe == null
+                  ? 'Heard (temporary speech-to-text)'
+                  : 'Heard (Whisper on the laptop · classifier label)',
+              style: text.labelMedium?.copyWith(color: GoSafeColors.muted),
+            ),
+          ),
+          if (_heard.isEmpty)
+            GoCard(
+              child: Text(
+                'Listening… what people say during the ride shows up here.',
+                style: text.bodySmall?.copyWith(color: GoSafeColors.muted),
+              ),
+            ),
+          for (final (i, (_, t)) in _heard.indexed)
+            GoCard(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              child: Text.rich(
+                TextSpan(
+                  text: t,
+                  children: [
+                    if (widget.describe?.call(t) case final note?)
+                      TextSpan(
+                        text: '   $note',
+                        style: text.labelMedium?.copyWith(
+                          color: GoSafeColors.brandDeep,
+                        ),
+                      ),
+                  ],
+                ),
+                key: ValueKey('heard-$i'),
+                style: text.bodySmall,
+              ),
+            ),
+        ],
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 20, 16, 12),
+          child: Text(
+            'Help us to improve',
+            style: text.titleMedium?.copyWith(fontWeight: FontWeight.w700),
+          ),
+        ),
+        SizedBox(
+          height: 220,
+          child: ListView(
+            scrollDirection: Axis.horizontal,
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            children: const [
+              HelpCard(
+                label: 'Redesign report',
+                title: 'Do you like our redesign?',
+                color: GoSafeColors.helpBlue,
+                asset: 'assets/ride/mascot_run.png',
+              ),
+              SizedBox(width: 12),
+              HelpCard(
+                label: 'Safety report',
+                title: 'How safe did you feel?',
+                color: GoSafeColors.helpOrange,
+                asset: 'assets/ride/mascot_wave.png',
+              ),
+              SizedBox(width: 12),
+              HelpCard(
+                label: 'GoSafe tips',
+                title: 'Set your safe phrase',
+                color: GoSafeColors.rideIcon,
+                asset: 'assets/ride/mascot_cool.png',
+              ),
+            ],
+          ),
+        ),
+      ],
     );
   }
 }

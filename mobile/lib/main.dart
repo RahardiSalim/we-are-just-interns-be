@@ -9,6 +9,7 @@ import 'package:material_ui/material_ui.dart';
 import 'package:path_provider/path_provider.dart';
 
 import 'engine/safe_phrase.dart';
+import 'engine/scenarios.dart';
 import 'features/safety/are_you_ok.dart' show SafetyText;
 import 'features/trip/trip_screen.dart';
 import 'engine/safety_engine.dart';
@@ -36,6 +37,12 @@ const _firebaseOptions = FirebaseOptions(
 // 10.0.2.2 is this Mac as seen from the Android emulator.
 const _emulatorHost = String.fromEnvironment('EMULATOR_HOST');
 const _devMlUrl = String.fromEnvironment('DEV_ML');
+// DEMO_SCRIPT: safe_phrase, or a test scenario (none, warning1-3, high1-3; lib/engine/scenarios.dart).
+const _demoScript = String.fromEnvironment('DEMO_SCRIPT');
+// On the web the address can pick one too (?scenario=high2), to try each against the real backend.
+final _scenario = scenarioNamed(
+  kIsWeb ? Uri.base.queryParameters['scenario'] ?? _demoScript : _demoScript,
+);
 final _devMl = _devMlUrl.isEmpty ? null : DevClassifier(Uri.parse(_devMlUrl));
 // Experiment: speech-to-text on the phone itself (services/on_device_stt.dart). WHISPER_MODEL is the
 // ggml file on the phone, WHISPER_VAD the Silero ggml file, WHISPER_TEST_WAV a 16 kHz mono WAV to
@@ -85,6 +92,8 @@ class GoSafeApp extends StatelessWidget {
     final dev = _devMl;
     return MaterialApp(
       title: 'GoSafe',
+      // The Gojek consumer app is light; the dark theme stays for later.
+      themeMode: ThemeMode.light,
       // Plus Jakarta Sans stands in for Asphalt's Maison Neue (licensed); see contracts/DESIGN.md.
       theme: goSafeTheme(
         Brightness.light,
@@ -95,26 +104,38 @@ class GoSafeApp extends StatelessWidget {
         fontFamily: GoogleFonts.plusJakartaSans().fontFamily,
       ),
       home: TripScreen(
+        // Straight into the GoJek order with the recording prompt; ROLE=driver for the driver's phone.
+        autoStart: true,
+        role: const String.fromEnvironment('ROLE', defaultValue: 'rider'),
         api: Api(token: () => user.getIdToken()),
         recorder: MicRecorder(store),
         store: store,
         // DEV_ML: the real mic through the laptop's Whisper and classifier (stt/dev_server.py).
-        listen: dev == null && _whisperModel.isNotEmpty
+        // WHISPER_MODEL: speech-to-text on the phone. Otherwise a test scenario, or the demo conversation.
+        listen: dev != null
+            ? () => devListener(dev.server, dev)
+            : _whisperModel.isNotEmpty
             ? () => onDeviceListener(
                 modelPath: _whisperModel,
                 vadModelPath: _whisperVad.isEmpty ? null : _whisperVad,
                 pcm: _whisperTestWav.isEmpty ? null : pcmFromWav(_whisperTestWav),
                 chunkSecs: _whisperChunkSecs,
               )
-            : dev == null
+            : _scenario != null
             ? () => scriptedListener(
-                lines:
-                    const String.fromEnvironment('DEMO_SCRIPT') == 'safe_phrase'
+                lines: [for (final (t, _) in _scenario!.lines) t],
+              )
+            : () => scriptedListener(
+                lines: _demoScript == 'safe_phrase'
                     ? safePhraseConversation
                     : demoConversation,
-              )
-            : () => devListener(dev.server, dev),
-        engine: dev == null ? null : () => SafetyEngine(classifier: dev),
+              ),
+        // A test scenario plays the model's labels back (lib/engine/scenarios.dart).
+        engine: dev != null
+            ? () => SafetyEngine(classifier: dev)
+            : _scenario != null
+            ? () => SafetyEngine(classifier: ScenarioClassifier(_scenario!))
+            : null,
         describe: dev == null
             ? null
             : (line) => switch (dev.raw[line]) {
