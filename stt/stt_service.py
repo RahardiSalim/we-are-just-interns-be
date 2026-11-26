@@ -19,6 +19,10 @@ Examples
   # model folder and: pip install faster-whisper)
   python stt_service.py --audio ride.wav --backend faster --model ./whisper-id-ct2
 
+  # backend "whispercpp" runs a ggml build, for example the 264 MB q8_0 of maleo
+  # (needs: pip install pywhispercpp; file and hash are pinned in models/README.md)
+  python stt_service.py --audio ride.wav --backend whispercpp --model ./ggml-small-id-q8_0.bin
+
 Notes
 - Segment confidence is a simple heuristic, not a calibrated probability.
 - The speaker tag is only a hint given by --speaker (for example the phone that
@@ -174,6 +178,22 @@ class FasterWhisperBackend:
         return {"text": " ".join(s.text.strip() for s in segs),
                 "avg_logprob": float(np.mean([s.avg_logprob for s in segs])),
                 "no_speech_prob": float(max(s.no_speech_prob for s in segs))}
+
+
+class WhisperCppBackend:
+    """whisper.cpp (ggml) via pywhispercpp (pip: pywhispercpp). model_path is a ggml .bin file,
+    for example ggml-small-id-q8_0.bin from maleo-ai/whisper-small-id (see models/README.md).
+    Like the hf backend it gives no avg_logprob, so segment_confidence stays at 0.7."""
+
+    def __init__(self, model_path, threads=4):
+        from pywhispercpp.model import Model
+        self.name = "whisper.cpp " + str(model_path).replace("\\", "/").rsplit("/", 1)[-1]
+        self.model = Model(model_path, n_threads=threads, language="id", print_progress=False,
+                           print_realtime=False, print_timestamps=False)
+
+    def transcribe(self, audio):
+        text = " ".join(s.text.strip() for s in self.model.transcribe(audio)).strip()
+        return {"text": text, "avg_logprob": None, "no_speech_prob": None}
 
 
 # ------------------------------------------------------------- text processing
@@ -364,7 +384,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--audio", required=True)
     ap.add_argument("--trip_id", default="trip")
-    ap.add_argument("--backend", choices=["dummy", "hf", "faster"], default="dummy")
+    ap.add_argument("--backend", choices=["dummy", "hf", "faster", "whispercpp"], default="dummy")
     ap.add_argument("--model", default="maleo-ai/whisper-small-id")
     ap.add_argument("--dummy_texts", default=None, help="JSON list of texts, for --backend dummy")
     ap.add_argument("--vad", choices=["energy", "silero"], default="silero")
@@ -381,6 +401,8 @@ def main():
         backend = DummyBackend(texts)
     elif a.backend == "hf":
         backend = HFBackend(a.model)
+    elif a.backend == "whispercpp":
+        backend = WhisperCppBackend(a.model)
     else:
         backend = FasterWhisperBackend(a.model)
     vad = SileroVAD() if a.vad == "silero" else EnergyVAD()

@@ -1,5 +1,8 @@
 """Tests for the STT module. They need numpy, scipy and soundfile only: the model
 backends (torch, transformers, silero-vad) are not imported, so these run in seconds."""
+import sys
+import types
+
 import numpy as np
 import pytest
 
@@ -161,3 +164,35 @@ def test_transcript_times_are_relative_to_the_window():
     audio = synthetic_ride()
     shifted = S.process_window(audio, S.DummyBackend(TEXTS), S.EnergyVAD(), trip_id="T1", offset_s=600.0)
     assert S.to_transcript_lines(shifted) == S.to_transcript_lines(run(audio, TEXTS))
+
+
+# ------------------------------------------------------ whisper.cpp backend (glue only)
+def test_whispercpp_backend_joins_segments_and_forces_indonesian(monkeypatch):
+    """Uses a stand-in for pywhispercpp, so no model and no extra package are needed."""
+    calls = {}
+
+    class Seg:
+        def __init__(self, text):
+            self.text = text
+
+    class FakeModel:
+        def __init__(self, path, **params):
+            calls["path"], calls["params"] = path, params
+
+        def transcribe(self, audio):
+            calls["samples"] = len(audio)
+            return [Seg(" halo "), Seg("selamat siang ")]
+
+    fake = types.ModuleType("pywhispercpp.model")
+    fake.Model = FakeModel
+    monkeypatch.setitem(sys.modules, "pywhispercpp", types.ModuleType("pywhispercpp"))
+    monkeypatch.setitem(sys.modules, "pywhispercpp.model", fake)
+
+    backend = S.WhisperCppBackend("/models/ggml-small-id-q8_0.bin")
+    out = backend.transcribe(np.zeros(S.SR, dtype="float32"))
+
+    assert out == {"text": "halo selamat siang", "avg_logprob": None, "no_speech_prob": None}
+    assert calls["params"]["language"] == "id"  # language is forced, never auto-detected
+    assert calls["samples"] == S.SR
+    assert backend.name == "whisper.cpp ggml-small-id-q8_0.bin"
+
