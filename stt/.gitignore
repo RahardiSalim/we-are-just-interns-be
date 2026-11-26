@@ -25,3 +25,6 @@
 # Eval recordings: people's voices, never committed
 /eval/recordings/
 /eval/out/
+
+# Exception: the 5-label IndoBERT-lite classifier (46.8 MB) is committed so the team can pull and use it
+!/models/clf-lite-5x/

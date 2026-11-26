@@ -219,7 +219,7 @@ def main() -> None:
     t = sub.add_parser("transcribe")
     t.add_argument("--recordings", default=str(HERE / "recordings"))
     t.add_argument("--whisper", default="models/maleo-small-id-q8_0/ggml-small-id-q8_0.bin")
-    t.add_argument("--classifier", default="models/classifier")
+    t.add_argument("--classifier", default="models/clf-lite-5x")
     t.add_argument("--out", default=str(HERE / "out" / "asr.json"))
     r = sub.add_parser("report")
     r.add_argument("--asr", default=str(HERE / "out" / "asr.json"))

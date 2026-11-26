@@ -1,0 +1,30 @@
+{
+ "base": "indobenchmark/indobert-lite-base-p1",
+ "scheme": "5",
+ "extra": [
+  "data/classifier_extra.csv"
+ ],
+ "labels": [
+  "normal",
+  "sexual",
+  "threat",
+  "uncomfortable",
+  "victim"
+ ],
+ "train": 3790,
+ "test": 821,
+ "test_rounds": [
+  "1",
+  "19",
+  "20",
+  "24",
+  "27",
+  "37",
+  "46",
+  "50",
+  "55",
+  "58"
+ ],
+ "epochs": 6,
+ "seed": 7
+}

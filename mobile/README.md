@@ -328,8 +328,8 @@ Then set the real thresholds in `SafetyEngine`.
 
 Until Whisper and the classifier run on the phone, the web app can use them on the laptop: `stt/dev_server.py` runs Akmal's speech-to-text pipeline (Silero voice detection, Whisper maleo small, the hallucination filter) and the team's DistilBERT classifier.
 
-1. Put the models in `stt/models/` (git-ignored): `maleo-small-id-q8_0/ggml-small-id-q8_0.bin` (see `stt/models/README.md`) and `classifier/` (from `gosafe-classifier-distilbert-11.zip`).
-2. From `stt/`: `uv run --no-project --python 3.12 --with numpy --with scipy --with soundfile --with pywhispercpp --with torch --with transformers --with safetensors --with silero-vad python dev_server.py --port 7088 --whisper models/maleo-small-id-q8_0/ggml-small-id-q8_0.bin --classifier models/classifier` (add `--save-dir <folder outside the repo>` to keep every received piece for replay).
+1. The classifier comes with the repo: `stt/models/clf-lite-5x/` (IndoBERT-lite, 5 labels). Download the Whisper model into `stt/models/maleo-small-id-q8_0/` (git-ignored, see `stt/models/README.md`).
+2. From `stt/`: `uv run --no-project --python 3.12 --with numpy --with scipy --with soundfile --with pywhispercpp --with torch --with transformers --with safetensors --with silero-vad python dev_server.py --port 7088 --whisper models/maleo-small-id-q8_0/ggml-small-id-q8_0.bin --classifier models/clf-lite-5x` (add `--save-dir <folder outside the repo>` to keep every received piece for replay).
 3. From `mobile/`: `flutter run -d chrome --dart-define=DEV_ML=http://localhost:7088`, or `flutter build web --dart-define=DEV_ML=http://localhost:7088` and serve `build/web`.
 
 How it works (`lib/services/dev_ml.dart`):

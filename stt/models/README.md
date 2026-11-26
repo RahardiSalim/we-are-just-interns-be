@@ -1,6 +1,6 @@
 # Model candidates for the phone
 
-Model files are **not committed**. They are large binaries, GitHub rejects files over 100 MB, and anything committed stays in the history for everyone who clones. Instead each model is pinned here by source, revision and SHA-256, and downloaded when needed. Downloaded files are git-ignored (`stt/.gitignore`).
+Model files are **not committed**, with one exception: the 5-label IndoBERT-lite text classifier in [`clf-lite-5x/`](clf-lite-5x/README.md) (46.8 MB, under GitHub's 100 MB limit), so the team can pull and use it. They are large binaries, GitHub rejects files over 100 MB, and anything committed stays in the history for everyone who clones. Instead each model is pinned here by source, revision and SHA-256, and downloaded when needed. Downloaded files are git-ignored (`stt/.gitignore`).
 
 [contracts/ARCHITECTURE.md](../../contracts/ARCHITECTURE.md) ("On-device listening") plans `sherpa_onnx` (ONNX int8) on the phone. This page measures what is available in that format **and** in whisper.cpp's ggml format, because one of them turned out to be much easier to get.
 
