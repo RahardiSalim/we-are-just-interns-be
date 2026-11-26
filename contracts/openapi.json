@@ -258,13 +258,13 @@
       }
     },
     "/trips/{trip_id}/recording": {
-      "post": {
+      "put": {
         "tags": [
           "trips"
         ],
-        "summary": "Start Recording Upload",
-        "description": "After the ride: the full audio plus the moments to check. Returns where to upload it.",
-        "operationId": "start_recording_upload_trips__trip_id__recording_post",
+        "summary": "Save Recording",
+        "description": "A phone's recording details, sent before its pieces and again as they go up. Each phone has its own.",
+        "operationId": "save_recording_trips__trip_id__recording_put",
         "security": [
           {
             "HTTPBearer": []
@@ -299,7 +299,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Start Recording Upload Trips  Trip Id  Recording Post"
+                  "title": "Response Save Recording Trips  Trip Id  Recording Put"
                 }
               }
             }
@@ -317,13 +317,14 @@
         }
       }
     },
-    "/trips/{trip_id}/recording/done": {
+    "/trips/{trip_id}/recording/pieces/{n}": {
       "post": {
         "tags": [
           "trips"
         ],
-        "summary": "Finish Recording Upload",
-        "operationId": "finish_recording_upload_trips__trip_id__recording_done_post",
+        "summary": "Piece Upload Url",
+        "description": "Where to upload audio piece n. Re-sending a piece overwrites it, so retries are safe.",
+        "operationId": "piece_upload_url_trips__trip_id__recording_pieces__n__post",
         "security": [
           {
             "HTTPBearer": []
@@ -338,6 +339,17 @@
               "type": "string",
               "title": "Trip Id"
             }
+          },
+          {
+            "name": "n",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "maximum": 1999,
+              "minimum": 0,
+              "title": "N"
+            }
           }
         ],
         "responses": {
@@ -348,7 +360,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Finish Recording Upload Trips  Trip Id  Recording Done Post"
+                  "title": "Response Piece Upload Url Trips  Trip Id  Recording Pieces  N  Post"
                 }
               }
             }
@@ -366,13 +378,14 @@
         }
       }
     },
-    "/trips/{trip_id}/recording-url": {
+    "/trips/{trip_id}/recording-urls": {
       "get": {
         "tags": [
           "trips"
         ],
-        "summary": "Recording Url",
-        "operationId": "recording_url_trips__trip_id__recording_url_get",
+        "summary": "Recording Urls",
+        "description": "10-minute links to every uploaded piece, per phone. The dashboard joins them to play. Logged.",
+        "operationId": "recording_urls_trips__trip_id__recording_urls_get",
         "security": [
           {
             "HTTPBearer": []
@@ -397,7 +410,7 @@
                 "schema": {
                   "type": "object",
                   "additionalProperties": true,
-                  "title": "Response Recording Url Trips  Trip Id  Recording Url Get"
+                  "title": "Response Recording Urls Trips  Trip Id  Recording Urls Get"
                 }
               }
             }
@@ -421,6 +434,7 @@
           "incidents"
         ],
         "summary": "Create Incident",
+        "description": "One case per ride: a report while the ride already has an open case (from either phone) joins it.",
         "operationId": "create_incident_incidents_post",
         "requestBody": {
           "content": {
@@ -652,65 +666,6 @@
                   "type": "object",
                   "additionalProperties": true,
                   "title": "Response Decide Incidents  Incident Id  Decision Post"
-                }
-              }
-            }
-          },
-          "422": {
-            "description": "Validation Error",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
-    "/checkins/{checkin_id}/reply": {
-      "post": {
-        "tags": [
-          "checkins"
-        ],
-        "summary": "Reply",
-        "operationId": "reply_checkins__checkin_id__reply_post",
-        "security": [
-          {
-            "HTTPBearer": []
-          }
-        ],
-        "parameters": [
-          {
-            "name": "checkin_id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string",
-              "title": "Checkin Id"
-            }
-          }
-        ],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/Reply"
-              }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Successful Response",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "additionalProperties": true,
-                  "title": "Response Reply Checkins  Checkin Id  Reply Post"
                 }
               }
             }
@@ -1072,6 +1027,23 @@
             "maxItems": 5000,
             "title": "Transcript",
             "default": []
+          },
+          "pieces": {
+            "type": "integer",
+            "maximum": 2000.0,
+            "minimum": 0.0,
+            "title": "Pieces",
+            "default": 0
+          },
+          "live": {
+            "type": "boolean",
+            "title": "Live",
+            "default": false
+          },
+          "done": {
+            "type": "boolean",
+            "title": "Done",
+            "default": false
           }
         },
         "type": "object",
@@ -1080,24 +1052,8 @@
           "contentType",
           "markers"
         ],
-        "title": "Recording"
-      },
-      "Reply": {
-        "properties": {
-          "answer": {
-            "type": "string",
-            "enum": [
-              "ok",
-              "need_help"
-            ],
-            "title": "Answer"
-          }
-        },
-        "type": "object",
-        "required": [
-          "answer"
-        ],
-        "title": "Reply"
+        "title": "Recording",
+        "description": "One phone's copy of the ride: what it heard and flagged, and how many audio pieces it has sent."
       },
       "StartTrip": {
         "properties": {
@@ -1124,13 +1080,20 @@
           },
           "riderConsent": {
             "type": "boolean",
-            "title": "Riderconsent"
+            "title": "Riderconsent",
+            "default": false
+          },
+          "role": {
+            "type": "string",
+            "enum": [
+              "rider",
+              "driver"
+            ],
+            "title": "Role",
+            "default": "rider"
           }
         },
         "type": "object",
-        "required": [
-          "riderConsent"
-        ],
         "title": "StartTrip"
       },
       "TranscriptLine": {

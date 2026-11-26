@@ -53,37 +53,82 @@ def test_one_trip_per_order_and_only_participants_touch_it(client, login, db):
     assert client.post("/trips/nope/end").status_code == 404
 
 
-def test_after_the_ride_the_full_recording_uploads_with_markers(client, login, db):
+def put_recording(client, order, **extra):
+    body = {"durationSec": 25.0, "contentType": "audio/aac", "markers": MARKERS, **extra}
+    return client.put(f"/trips/{order}/recording", json=body)
+
+
+def test_after_the_ride_every_piece_uploads_with_markers(client, login, db):
     login("rider1")
     client.post("/trips", json={"orderId": "GR-1004", "riderConsent": True})
-    created = client.post("/trips/GR-1004/recording", json={"durationSec": 25.0, "contentType": "audio/aac", "markers": MARKERS})
-    assert created.status_code == 200, created.text
-    assert created.json()["uploadUrl"] == "https://signed.test/PUT/recordings/GR-1004.aac"
+    assert put_recording(client, "GR-1004").json() == {"status": "uploading"}
+    piece = client.post("/trips/GR-1004/recording/pieces/1").json()
+    assert piece["uploadUrl"] == "https://signed.test/PUT/recordings/GR-1004/rider/000001.aac"
+    assert put_recording(client, "GR-1004", pieces=2, done=True).json() == {"status": "uploaded"}
 
-    rec = db.document("trips", "GR-1004").get().to_dict()["recording"]
-    assert (rec["status"], rec["durationSec"]) == ("awaiting_upload", 25.0)
+    rec = db.document("trips", "GR-1004").get().to_dict()["recordings"]["rider"]
+    assert (rec["status"], rec["pieces"], rec["live"]) == ("uploaded", 2, False)
     assert [m["kind"] for m in rec["markers"]] == ["warning", "high", "sos"]
 
-    assert client.post("/trips/GR-1004/recording/done").status_code == 200
-    assert db.document("trips", "GR-1004").get().to_dict()["recording"]["status"] == "uploaded"
-
     login("agent1")
-    assert client.get("/trips/GR-1004/recording-url").json() == {"url": "https://signed.test/GET/recordings/GR-1004.aac"}
+    assert client.get("/trips/GR-1004/recording-urls").json() == {"rider": {"contentType": "audio/aac", "urls": [
+        "https://signed.test/GET/recordings/GR-1004/rider/000000.aac",
+        "https://signed.test/GET/recordings/GR-1004/rider/000001.aac",
+    ]}}
     assert [a.get("action") for a in db.collection("auditLogs").get()] == ["view_recording"]
+
+
+def test_pieces_need_the_details_first(client, login, db):
+    login("rider1")
+    client.post("/trips", json={"orderId": "GR-1007", "riderConsent": True})
+    assert client.post("/trips/GR-1007/recording/pieces/0").status_code == 409
+
+
+def test_live_marks_the_open_case_until_the_ride_ends(client, login, db):
+    login("rider1")
+    client.post("/trips", json={"orderId": "GR-1008", "riderConsent": True})
+    created = client.post("/incidents", json={"tripId": "GR-1008", "trigger": "sos", "windowStart": "2026-11-26T12:00:00Z",
+                                              "windowEnd": "2026-11-26T12:00:30Z"}).json()
+    client.post(f"/incidents/{created['incidentId']}/finalize")
+    assert put_recording(client, "GR-1008", pieces=1, live=True).json() == {"status": "live"}
+    assert db.document("incidents", created["incidentId"]).get().get("live") is True
+    put_recording(client, "GR-1008", pieces=3, done=True)
+    assert db.document("incidents", created["incidentId"]).get().get("live") is False
+
+
+def test_a_report_shares_the_recording_but_warnings_alone_do_not(client, login, db):
+    login("rider1")
+    client.post("/trips", json={"orderId": "GR-1006", "riderConsent": True})
+    warnings_only = {"markers": [MARKERS[0]]}
+    assert put_recording(client, "GR-1006", **warnings_only).status_code == 409
+    assert "recordings" not in db.document("trips", "GR-1006").get().to_dict()
+    assert put_recording(client, "GR-1006", markers=[MARKERS[0], {"at": 12.0, "kind": "manual_unsafe"}]).status_code == 200
 
 
 def test_no_recording_without_both_consents(client, login, db):
     login("rider1")
     client.post("/trips", json={"orderId": "GR-1005", "riderConsent": False})
-    body = {"durationSec": 5.0, "contentType": "audio/mp4", "markers": []}
-    assert client.post("/trips/GR-1005/recording", json=body).status_code == 409
+    assert put_recording(client, "GR-1005").status_code == 409
     login("rider2")
-    assert client.get("/trips/GR-1005/recording-url").status_code == 403, "agents only"
+    assert client.get("/trips/GR-1005/recording-urls").status_code == 403, "agents only"
 
 
-def test_a_ride_with_only_warnings_keeps_its_recording_private(client, login, db):
+def test_a_driver_phone_joins_the_ride_and_keeps_its_own_recording(client, login, db):
     login("rider1")
-    client.post("/trips", json={"orderId": "GR-1006", "riderConsent": True})
-    warnings_only = {"durationSec": 25.0, "contentType": "audio/mp4", "markers": [MARKERS[0], {"at": 12.0, "kind": "manual_unsafe"}]}
-    assert client.post("/trips/GR-1006/recording", json=warnings_only).status_code == 409
-    assert "recording" not in db.document("trips", "GR-1006").get().to_dict()
+    client.post("/trips", json={"orderId": "GR-1009", "riderConsent": True})
+    login("driver2")
+    assert client.post("/me/consent", json={"audioConsent": True}).status_code == 200
+    assert client.post("/trips", json={"role": "driver"}).json() == {"tripId": "GR-1009"}
+    trip = db.document("trips", "GR-1009").get().to_dict()
+    assert (trip["driverId"], trip["consent"]) == ("driver2", {"rider": True, "driver": True})
+
+    put_recording(client, "GR-1009", pieces=1, done=True)
+    login("rider1")
+    put_recording(client, "GR-1009", pieces=2, done=True)
+    recs = db.document("trips", "GR-1009").get().to_dict()["recordings"]
+    assert (recs["driver"]["pieces"], recs["rider"]["pieces"]) == (1, 2)
+
+
+def test_a_driver_with_no_ride_waiting_is_told(client, login, db):
+    login("driver2")
+    assert client.post("/trips", json={"role": "driver"}).status_code == 404

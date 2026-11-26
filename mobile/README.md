@@ -11,15 +11,15 @@ This guide describes the app as it is built today. The product decisions behind 
 | Start ride, consent prompt, no login (anonymous sign-in) | Built |
 | Microphone recording for the whole ride | Built (`record` package, AAC on Android, WAV in the browser preview) |
 | Decision engine (30 s window, classifier, rules) | Built and tested |
-| Warning, high flag sent at once, "Are you okay?", SOS, "I feel unsafe" | Built and tested |
-| Every ride kept on the phone for 7 days, encrypted, in 30-second pieces | Built and tested |
-| Full recording uploaded after a high or SOS ride, retried until it goes through | Built and tested |
+| Warning, high flag sent at once, "Are you okay?", SOS, Report driver / passenger | Built and tested |
+| Rider and driver on the same app (switch on the home screen, demo only) | Built and tested (driver mode not yet run on a device) |
+| Share levels: local, at end, live (see "What leaves the phone, and when") | Built and tested; Live tested on the Android emulator |
+| Every ride kept on the phone for 7 days, encrypted, in 30-second pieces (10-second when Live) | Built and tested |
 | SOS with no signal: offers 112, retries until sent | Built and tested |
-| Answering backend check-ins | Built (reads Firestore directly) |
 | Voice detection, speech-to-text | **Temporary**: a scripted conversation stands in |
 | Classifier | **Temporary**: an Indonesian keyword filter stands in for IndoBERT |
 | Recording in the background | Built: a microphone foreground service ("GoSafe is keeping this ride safe") keeps recording and listening with the screen locked. Tested on the Android emulator |
-| Alarm on a high flag, alert for check-ins | Built: a high flag sounds the phone's alarm (alarm sound, vibration, repeating) until someone answers "Are you okay?"; a backend check-in shows a normal alert. No Firebase needed: the service keeps the app alive during the ride |
+| High flag check, quiet first | Built: vibration every 10 s; Live at 60 s with no answer; loud alarm and "shout TOLONG" at 120 s. No Firebase needed: the service keeps the app alive during the ride. Tested on the Android emulator |
 | Encryption on the phone | Built: every 30-second piece and the ride's details are AES-256-GCM encrypted with an Android Keystore key as they're saved, and decrypted only to upload |
 | Push when the app is fully closed | Not built: needs FCM and a real Firebase project. During a ride the service keeps the app open, so it isn't needed then |
 
@@ -37,17 +37,49 @@ flowchart TD
     F -- Yes --> G[Record and listen for the whole ride]
     G --> H[Tap End ride]
     D --> H
-    H --> I{Did the ride have a high flag or an SOS?}
-    I -- Yes --> J[Upload the full recording with markers and transcript. No signal: retry every minute]
-    I -- No --> K[Nothing leaves the phone]
+    H --> I{Share level of the ride}
+    I -- Local --> K[Nothing leaves the phone]
+    I -- At end --> J[Upload every piece, transcript and flags. No signal: retry every minute]
+    I -- Live --> J2[Already streamed: send the last piece and close]
     J --> L[Kept encrypted on the phone for 7 days, then deleted]
+    J2 --> L
     K --> L
 ```
 
 - **No login.** Each install signs in anonymously in the background, so the backend still knows whose ride and report it is. In the real product the GoJek app's own login replaces this.
-- **One flow, no role choice.** The app is the consumer's. Only the consumer is asked for consent.
+- **Rider or driver.** A switch on the home screen picks whose phone this is (demo only; in production these are two apps). The rider is asked for consent; the driver isn't, because their **Safe Ride** switch is their consent. The driver's phone joins the rider's ride (`POST /trips` with `role: driver`), so the rider must start first.
 - **The driver decided earlier.** Drivers turn recording on or off in their own settings. Turning it on gives them the **Safe Ride badge**, which the consumer sees during the ride ("Your driver has Safe Ride on"). If the driver left it off, nothing is recorded.
 - **No location.** The app never asks for location permission. A ride is identified by the GoJek order ID; for the demo the backend generates one.
+
+## What leaves the phone, and when
+
+Each ride has a **share level** that only goes up: **local → at end → live**.
+
+| What happened | You answer | Level | What leaves the phone |
+|---|---|---|---|
+| Nothing | | Local | Nothing. Kept encrypted on the phone 7 days |
+| Warning (medium) | "I'm fine", or ignore it | Local | Nothing. The flag is kept on the phone with the ride |
+| Warning, or any time | **Report driver** (or passenger) → "I'm safe for now" | At end | The report goes now (`manual_unsafe`). When the ride ends: every audio piece, the transcript and every flag |
+| Warning, or any time | **Report driver** → **Yes, get help** | Live | An SOS, and Live (below) |
+| High flag | "I'm okay" | At end | The flag went to an agent at once. When the ride ends: the whole ride |
+| High flag | "I need help" | Live | An SOS, and Live |
+| High flag | no answer | Live at 60 s | See the timeline below |
+| Any time | SOS button, the safe phrase, or a shout for help | Live | An SOS, and Live |
+
+**Live** means: at once, every audio piece so far, the transcript and the flags; then a new 10-second piece and the new lines every 10 seconds until the ride ends. The case is marked **LIVE** at the top of the agents' queue, and the agent can listen while the ride goes on.
+
+**A high flag nobody answers** (quiet first, so the phone doesn't give the user away):
+
+| Time after the flag | Phone | Agent |
+|---|---|---|
+| 0 s | The flag is sent. "Are you okay?" on screen, and a **silent** notification that only vibrates | The case appears, high priority |
+| every 10 s | Another vibration | |
+| 60 s | Goes **Live** (still silent) | LIVE badge; the agent can listen and call the rider |
+| 120 s | The **loud alarm** (repeats until answered), and on screen: "If you're in danger, shout TOLONG. Our safety team is listening." Hearing "tolong" or "help" now counts as "I need help" | |
+
+Answering at any point stops the buzzing or the alarm. "tolong" only counts during the alarm, so "tolong belok kiri" in normal talk does nothing.
+
+**One case per ride.** The rider's and the driver's phones can both report the same ride; the backend joins every report into one case and makes it high priority if any of them is an SOS or a high flag. Each phone keeps and uploads its own recording, and the agent can play either.
 
 ## What the phone stores, and when
 
@@ -57,8 +89,9 @@ Each recorded ride gets a folder in the app's private storage, `rides/<order ID>
 |---|---|---|
 | "Yes, record" and the mic starts | The ride's details: order ID, start time, audio format | `meta.enc` |
 | Every line heard | That line and its time from the start | `meta.enc` (rewritten) |
-| Every warning, high flag, SOS or "I feel unsafe" | A marker: time, kind, label, score, the line | `meta.enc` (rewritten) |
-| Every 30 seconds | The last 30 seconds of audio (AAC, ADTS frames) | `000000.aac.enc`, `000001.aac.enc`, … |
+| Every warning, high flag, SOS or report | A marker: time, kind, label, score, the line | `meta.enc` (rewritten) |
+| Every 30 seconds (10 when Live) | The latest audio (AAC, ADTS frames) | `000000.aac.enc`, `000001.aac.enc`, … |
+| A piece uploaded | How many pieces are up | `meta.enc` |
 | End ride | The last piece, the length, "ended" | the next piece, `meta.enc` |
 | Upload succeeded | "uploaded" | `meta.enc` |
 | App start, then every minute | Rides older than 7 days are deleted. Unfinished rides from a crash are closed. Flagged rides not yet sent are uploaded | |
@@ -70,7 +103,7 @@ Why pieces: if the app is killed, the phone restarts or the battery dies, the ri
 | Situation | What happens |
 |---|---|
 | SOS with no signal | A red banner: "We can't reach our safety team right now. We'll keep trying. If you are in danger, call 112." with a **Call 112** button (opens the dialer with 112 filled in; the rider presses call). The app retries the SOS every 5 to 10 seconds until it goes through, then shows "We're on it" |
-| High flag or "I feel unsafe" with no signal | Retried in the background, waiting longer each time (up to a minute) |
+| High flag or a report with no signal | Retried in the background, waiting longer each time (up to a minute) |
 | End ride with no signal | The recording stays queued: "We'll send the recording to our safety team as soon as you're online." Retried every minute while the app is open, for up to 7 days |
 | App killed or phone off mid-ride | Pieces up to the last 30 seconds are saved. At next launch the ride is closed (its length taken from the last line or marker) and, if it was flagged, uploaded |
 | Alarm, phone call, music, or a Bluetooth headset disconnecting during the ride | Recording continues (`audioInterruption: none`, `audioRouteChange: follow`) |
@@ -177,15 +210,18 @@ Every message is short and caring, never alarming. All the wording lives in one 
 | High flag | **Are you okay?** "Something didn't sound right, so we've let our safety team know. Tap if you need help." | I'm okay / I need help |
 | "I need help" or SOS | "We're on it. Our safety team will contact you right away." | |
 | "I'm okay" | "Glad you're okay. We're still here if anything changes." | |
-| Report or "I feel unsafe" | "Thanks for telling us. Our safety team will look into it." | |
+| Report driver / Report passenger | **We've reported this driver** (or passenger) "Our safety team will review this ride. Do you need help right now?" | I'm safe for now / Yes, get help |
+| "I'm safe for now" | "Thanks for telling us. We'll look into it after your ride." | |
+| Live | "Our safety team is following this ride live." | |
+| High flag unanswered for 120 s | "If you're in danger, shout TOLONG. Our safety team is listening." | |
 | End of a flagged ride | "Ride ended. The recording was sent to our safety team." | |
 | End of a flagged ride, no signal | "Ride ended. We'll send the recording to our safety team as soon as you're online." | |
 | End of any other ride | "Ride ended. Nothing needed checking. The recording stays locked on this phone for 7 days, then it's deleted." | |
 | SOS with no signal | "We can't reach our safety team right now. We'll keep trying. If you are in danger, call 112." | Call 112 |
-| Screen locked, high flag | Alarm notification **Are you okay?** "Something didn't sound right. Tap to tell us you're okay." Alarm sound and vibration repeat until answered | Tap opens the app |
+| Screen locked, high flag | Notification **Are you okay?** "Something didn't sound right. Tap to tell us you're okay." Vibration only for 2 minutes, then the alarm sound | Tap opens the app |
 | During the ride | Ongoing notification "GoSafe is keeping this ride safe" | |
 
-These messages appear in a card at the **top** of the screen, never as a pop-up at the bottom: nothing may cover the SOS button. SOS, "I feel unsafe" and "End ride" stay pinned at the bottom, and everything above them scrolls.
+These messages appear in a card at the **top** of the screen, never as a pop-up at the bottom: nothing may cover the SOS button. SOS, Report and "End ride" stay pinned at the bottom, and everything above them scrolls.
 
 ## What the phone sends, and when
 
@@ -195,9 +231,9 @@ These messages appear in a card at the **top** of the screen, never as a pop-up 
 |---|---|---|
 | `auto` | The engine reached "high" | Escalates straight away: the highest priority for customer service |
 | `sos` | SOS button, "I need help", or the safe phrase heard | Always escalates at once, never a check-in (a check-in would also ask the driver, which would give away a silent SOS). If processing fails, it's still escalated so an agent sees it |
-| `manual_unsafe` | "I feel unsafe", or Report on a warning | Escalates if the label is harmful; otherwise a check-in |
+| `manual_unsafe` | Report driver / passenger, or Report on a warning | Goes to an agent as medium priority (high if the label is harmful). Nobody else is asked anything |
 
-Each one is `POST /incidents`, then `POST /incidents/{id}/finalize`, with the phone's evidence:
+Each one is `POST /incidents`, then `POST /incidents/{id}/finalize`, with the phone's evidence. If the ride already has an open case, the report joins it (`merged: true`) and there's nothing to finalize:
 
 ```json
 {
@@ -216,13 +252,16 @@ Each one is `POST /incidents`, then `POST /incidents/{id}/finalize`, with the ph
 
 Warnings are **not** sent during the ride. They stay on the phone as markers.
 
-**After the ride, only if it had a high flag or an SOS.** The full recording and every moment to check:
+**The recording (at end, or live).** One phone's recording, in pieces:
+
+1. `PUT /trips/{id}/recording` with the details: `durationSec`, `contentType` (`audio/aac`), `markers`, `transcript`, `pieces` (how many are up), `live`, `done`.
+2. For each piece not sent yet: `POST /trips/{id}/recording/pieces/{n}` gives an upload URL; the phone uploads the piece there. Sending a piece twice overwrites it, so retries are safe.
+3. `PUT /trips/{id}/recording` again with the new `pieces` count. Live repeats this every 10 seconds; the last call has `done: true`, which starts the AI review.
 
 ```json
-POST /trips/GR-8FBA186A/recording
+PUT /trips/GR-8FBA186A/recording
 {
-  "durationSec": 25.0,
-  "contentType": "audio/aac",
+  "durationSec": 25.0, "contentType": "audio/aac", "pieces": 2, "live": false, "done": true,
   "markers": [
     {"at": 9.0, "kind": "warning", "label": "uncomfortable", "score": 0.65, "text": "Mbak kerja di mana? Udah punya pacar belum?"},
     {"at": 18.0, "kind": "high", "label": "sexual_harassment", "score": 0.8, "text": "Cantik banget sih, nanti mampir ke tempat saya dulu."}
@@ -234,16 +273,16 @@ POST /trips/GR-8FBA186A/recording
 }
 ```
 
-The backend answers with an upload URL and method. The phone sends the audio there, then calls `POST /trips/{id}/recording/done`. The backend refuses a recording with no `high` or `sos` marker, so this privacy rule also holds if the app has a bug. Agents play it with `GET /trips/{id}/recording-url`, which is logged.
+The backend refuses a recording with no `high`, `sos` or `manual_unsafe` marker, so this privacy rule also holds if the app has a bug. Agents get links to every piece with `GET /trips/{id}/recording-urls` (logged), and the dashboard joins them to play.
 
-Other calls: `POST /trips` (with `riderConsent`), `POST /trips/{id}/end` and `POST /checkins/{id}/reply`. The app reads two things straight from Firestore: the ride's consents, and its own unanswered check-ins.
+Other calls: `POST /trips` (with `riderConsent`, or `role: driver`), `POST /me/consent` (the driver's Safe Ride switch) and `POST /trips/{id}/end`. The app reads one thing straight from Firestore: the ride's consents.
 
 ## Privacy rules the code follows
 
 - Nothing is recorded unless the consumer said yes **and** the driver has Safe Ride on.
 - No location: no permission, no GPS, no route.
-- During the ride only high flags and button presses leave the phone.
-- The full recording leaves the phone only after a ride with a high flag or SOS. Any other ride never leaves the phone.
+- During the ride only high flags and button presses leave the phone, plus the recording itself when the ride is Live (an emergency).
+- A recording leaves the phone only after a report, a high flag or an SOS. Any other ride never leaves the phone.
 - Every ride is kept on the phone for 7 days (as the consent prompt says), in the app's private folder, encrypted piece by piece as it's recorded (the key never leaves the Android Keystore). After 7 days it's deleted, sent or not. The app has no playback or export.
 - While recording, Android always shows the "GoSafe is keeping this ride safe" notification: listening is never hidden.
 - A person at customer service reviews every case. The app never warns, suspends or bans a driver on its record.
@@ -277,13 +316,13 @@ Then set the real thresholds in `SafetyEngine`.
 
 ## Tests
 
-`flutter test` runs 24 tests with no backend needed.
+`flutter test` runs 30 tests with no backend needed.
 
 | File | Covers |
 |---|---|
 | `test/engine_test.dart` | Classifier labels, flags and scores. Engine: ordinary talk, warning and cooldown, high once per ride, the 30-second window, a threat below the high threshold |
-| `test/trip_screen_test.dart` | Consent yes starts recording and listening; "Not now" records nothing and SOS works; no recording if the driver lacks Safe Ride or the microphone is denied; the warning sends nothing; a high flag is sent at once and "I need help" sends SOS; a flagged ride uploads its recording (every piece, in order) with markers and transcript; a warnings-only ride stays on the phone; a flagged ride recorded offline is sent on the next try; a ride the app never ended is closed and sent at launch; rides over 7 days are deleted; SOS offline offers 112 and retries; the safe phrase sends a silent SOS once; a high flag sounds the alarm until answered; a backend check-in is answered once |
-| `test/file_ride_store_test.dart` | Pieces join in order (past 10 pieces); details round-trip; a deleted ride leaves no folder; unreadable details are dropped |
+| `test/trip_screen_test.dart` | Consent yes starts recording and listening; "Not now" records nothing and SOS works; no recording without Safe Ride or the mic; a warning ignored stays on the phone; a report sends at end, and "Yes, get help" goes Live; a high flag answered okay sends at end, "I need help" goes Live; a high flag nobody answers buzzes, goes Live at 60 s, alarms at 120 s, and a shout sends SOS; "tolong" in normal talk does nothing; offline uploads retry; a killed ride is closed and sent; rides over 7 days are deleted; SOS offline offers 112; the safe phrase sends a silent SOS and goes Live; driver mode joins with no consent prompt; a driver with no ride waiting is told |
+| `test/file_ride_store_test.dart` | Pieces are counted and read back by number; details round-trip (role, share level, pieces sent); a deleted ride leaves no folder; unreadable details are dropped |
 
 ## Running it
 

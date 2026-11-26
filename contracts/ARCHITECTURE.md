@@ -19,7 +19,7 @@ Cost: Cloud Run free tier covers a 2 GiB instance for roughly 62 h/month if it s
 
 - Mobile app and dashboard **read** Firestore live, **write** through FastAPI.
 - The app uploads audio straight to Cloud Storage using a signed URL from FastAPI.
-- FCM pushes check-ins to the app.
+- FCM is not used yet: during a ride the phone's own foreground service raises every alert.
 - Email (plain SMTP): whoever presses SOS gets a "ticket created, being processed" email; after a decision, the rider (and the driver when warned or suspended) is told what the safety team decided.
 - Neither client ever holds admin credentials.
 
@@ -43,14 +43,26 @@ Agreed 2026-11-26. **The mobile app is the core:** everything from speech-to-tex
 
 | Level | When | What happens |
 |---|---|---|
-| Warning | `score` ≥ warning threshold | A kind, neutral message on the phone with "I'm fine" and "Report". At most once every 10 minutes. Nothing is sent; the moment is marked in the recording. |
-| High | `score` ≥ high threshold for `threat` / `sexual_harassment` | The flag goes to the backend **immediately** (`trigger: auto`), which escalates it as the highest priority for customer service to check. At the same moment the phone asks "Are you okay?"; "I need help" sends an SOS report. |
-| SOS / "I feel unsafe" | A person presses it, any time | Sent immediately. The buttons are always on screen and never wait for the model. |
+| Warning | `score` ≥ warning threshold | A kind, neutral message on the phone with "I'm fine" and "Report". At most once every 10 minutes. Nothing is sent; the moment is marked on the phone. |
+| High | `score` ≥ high threshold for `threat` / `sexual_harassment` | The flag goes to the backend **immediately** (`trigger: auto`), escalated for an agent. The phone asks "Are you okay?", **quietly first**: vibration only, every 10 s. No answer at **60 s**: the phone goes **Live**. No answer at **120 s**: the loud alarm, and "shout TOLONG", which then counts as "I need help". |
+| Report driver / Report passenger | A person presses it, any time, or "Report" on a warning | Sent immediately (`trigger: manual_unsafe`), then "Do you need help right now?": "Yes, get help" is an SOS. |
+| SOS | The SOS button, "I need help", the safe phrase, or a shout for help | Sent immediately and the phone goes **Live**. The buttons are always on screen and never wait for the model. |
 
-**After the ride.** If the ride had a **high flag or an SOS**, the phone uploads the **full ride recording** automatically, with time-stamped markers of every moment to check (warnings, the high flag, SOS and "I feel unsafe" presses, each with label and score). A ride with only warnings, only "I feel unsafe", or nothing at all uploads nothing: it stays encrypted on the phone and is deleted after 7 days. With no signal, the upload waits on the phone and is retried until it goes through (within those 7 days). The backend refuses a recording without a high or SOS marker. In the cloud, recordings are deleted after 7 days unless a case is open.
+**What leaves the phone.** Each ride has a share level that only goes up (`Share` in `mobile/lib/services/ride_store.dart`):
+
+| Level | What leaves the phone | Reached by |
+|---|---|---|
+| Local | Nothing. Audio, transcript and flags stay encrypted on the phone for 7 days | Ride start, warnings, "I'm fine" |
+| At end | When the ride ends: every audio piece, the transcript and every flag, so the cloud computes nothing again | A report; a high flag |
+| Live | Now: every piece so far, transcript and flags; then each new 10-second piece and line until the ride ends | SOS, "I need help", "Yes, get help", the safe phrase, a shout for help, a high flag unanswered for 60 s |
+
+Both phones (rider and driver) run the same app and logic and each uploads its own recording. Reports from either phone about the same ride join **one case**.
+
+**Uploads.** Audio goes up in numbered pieces, so a retry never duplicates and Live can stream. With no signal, uploads wait on the phone and are retried every minute (within the 7 days). The backend refuses a recording without a `high`, `sos` or `manual_unsafe` marker. In the cloud, recordings are deleted after 7 days unless a case is open.
 
 **Rules.**
-- **Motorbike drivers:** a GoRide driver can't tap while riding, so the driver's silence never counts as "no reply" on a backend check-in. The rider's answer decides.
+- **No check-ins from the backend:** the phone asks its own user. The backend never asks the other person, which would tell a driver they've been reported.
+- **Motorbike drivers:** a GoRide driver can't tap while riding, so the safe phrase and "shout TOLONG" matter most on the driver's phone.
 - **A person decides:** customer service reviews every case. The model never warns, suspends or bans a driver on its own record.
 - **Nothing covers the SOS button:** messages appear at the top of the screen, never over the bottom buttons.
 
@@ -77,16 +89,15 @@ Every endpoint takes `Authorization: Bearer <Firebase ID token>`; the backend ch
 |---|---|---|
 | `GET /health` | Anyone | Liveness |
 | `POST /me/fcm-token` | App | Saves the device push token |
-| `POST /me/consent` | Driver app (future) | Sets `audioConsent`: the driver's Safe Ride setting |
-| `POST /trips` | App | Body: `riderConsent` (the consumer's answer), optional `orderId` (the GoJek order ID, which becomes the `tripId`; generated for the demo when missing), `mode`. Driver consent comes from the driver's Safe Ride setting. Assigns the demo driver; 409 if the order already has a trip |
+| `POST /me/consent` | Driver phone | Sets `audioConsent`: the driver's Safe Ride setting |
+| `POST /trips` | App | Body: `riderConsent` (the consumer's answer), optional `orderId` (the GoJek order ID, which becomes the `tripId`; generated for the demo when missing), `mode`. Driver consent comes from the driver's Safe Ride setting. Assigns the demo driver; 409 if the order already has a trip. With `role: driver` the driver's phone joins the trip instead (by `orderId`, or for the demo the newest active trip still waiting for a driver; 404 if none) |
 | `POST /trips/{id}/events` | App | Batch of SOS / manual-unsafe events with a timestamp. No location fields |
 | `POST /trips/{id}/end` | App | Ends the trip |
-| `POST /trips/{id}/recording` | App | After the ride: `durationSec`, `contentType`, `markers`. Needs both consents and a `high` or `sos` marker (409 otherwise). Returns `uploadUrl` + `uploadMethod` |
-| `POST /trips/{id}/recording/done` | App | Upload finished |
-| `GET /trips/{id}/recording-url` | Dashboard (agent) | Short-lived read URL for the full recording; writes an audit log |
-| `POST /incidents` | App | Body: `tripId`, `trigger` (`sos` \| `manual_unsafe` \| `auto`), window start/end, `deviceTranscript`, `deviceLabel`, `deviceScore` (`auto` requires label + score and always escalates). Returns `incidentId`, signed upload URL (10 min), `uploadMethod` |
+| `PUT /trips/{id}/recording` | App | This phone's recording details: `durationSec`, `contentType`, `markers`, `transcript`, `pieces` (uploaded so far), `live`, `done`. Needs both consents and a `high`, `sos` or `manual_unsafe` marker (409 otherwise). `live` marks the ride's open case LIVE; `done` starts the AI review |
+| `POST /trips/{id}/recording/pieces/{n}` | App | Upload URL + method for audio piece `n` (`recordings/{tripId}/{rider\|driver}/{n:06}.aac`). Needs the details first |
+| `GET /trips/{id}/recording-urls` | Dashboard (agent) | Short-lived read URLs for every piece, per phone; writes an audit log. The dashboard joins them to play |
+| `POST /incidents` | App | Body: `tripId`, `trigger` (`sos` \| `manual_unsafe` \| `auto`), window start/end, `deviceTranscript`, `deviceLabel`, `deviceScore` (`auto` requires label + score and always escalates). Returns `incidentId`, signed upload URL (10 min), `uploadMethod`. If the ride already has an open case (from either phone), the report joins it (`merged: true`, no finalize needed); an `sos` or `auto` report makes it high priority |
 | `POST /incidents/{id}/finalize` | App | Clip uploaded; returns 202 and starts processing |
-| `POST /checkins/{id}/reply` | App | `ok` or `need_help`, for the check-in after an "I feel unsafe" press. On GoRide only the rider's answer is required: the driver's silence never escalates, but the driver's `need_help` does |
 | `POST /incidents/{id}/open` | Dashboard (agent) | Takes an `escalated` ticket: `under_review`, `assignedAgent` = caller |
 | `GET /incidents/{id}/clip-url` | Dashboard (agent) | Short-lived signed read URL; writes an audit log |
 | `POST /incidents/{id}/decision` | Dashboard (agent) | `dismiss` \| `warn_driver` \| `suspend_driver` \| `contact_rider` + note |
@@ -99,10 +110,9 @@ Only the backend changes `status`.
 | Status | Set when | Next |
 |---|---|---|
 | `awaiting_upload` | `POST /incidents` | `processing` on finalize (no 10-min `failed` sweep yet) |
-| `processing` | Finalize | device transcript + label (keyword filter if the phone sent no label) → severity → `dismissed`, `checkin_pending` or `escalated` |
+| `processing` | Finalize | device transcript + label (keyword filter if the phone sent no label) → severity → `escalated` |
 | `dismissed` | Severity low | Logged, deleted at `deleteAt` |
-| `checkin_pending` | Severity medium; FCM push + `checkins` doc to rider and driver | `resolved_ok` if both reply ok; `escalated` on `need_help` or no reply in 90 s |
-| `escalated` | Severity high, failed check-in, or `trigger: auto`; summary built | `under_review` when an agent opens it |
+| `escalated` | Every processed case (severity orders the queue: LIVE first, then high, then medium); summary built | `under_review` when an agent opens it |
 | `under_review` | Agent calls `POST /incidents/{id}/open` | `closed` after a decision |
 | `closed` | Decision recorded; emails sent after the response (`services/mailer.py`) | Driver may appeal (stretch) |
 

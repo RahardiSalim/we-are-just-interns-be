@@ -23,22 +23,19 @@ class FileRideStore implements RideStore {
     );
   }
 
+  String _piecePath(String tripId, int index) =>
+      '${_dir(tripId).path}/${index.toString().padLeft(6, '0')}.aac.enc';
+
   @override
-  Future<Uint8List> audio(String tripId) async {
-    final pieces =
-        _dir(tripId)
-            .listSync()
-            .whereType<File>()
-            .where((f) => f.path.endsWith('.aac.enc'))
-            .map((f) => f.path)
-            .toList()
-          ..sort();
-    final b = BytesBuilder(copy: false);
-    for (final p in pieces) {
-      b.add(await open(p));
-    }
-    return b.takeBytes();
+  Future<int> pieceCount(String tripId) async {
+    final dir = _dir(tripId);
+    if (!dir.existsSync()) return 0;
+    return dir.listSync().where((f) => f.path.endsWith('.aac.enc')).length;
   }
+
+  @override
+  Future<Uint8List> piece(String tripId, int index) =>
+      open(_piecePath(tripId, index));
 
   @override
   Future<void> save(RideMeta meta) async {

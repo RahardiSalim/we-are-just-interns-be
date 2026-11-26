@@ -43,6 +43,22 @@ abstract final class SafetyText {
       'Ride ended. Nothing needed checking. The recording stays locked on this phone '
       "for 7 days, then it's deleted.";
 
+  static String reportButton({required bool driver}) =>
+      driver ? 'Report passenger' : 'Report driver';
+  static const reportThanks =
+      "Thanks for telling us. We'll look into it after your ride.";
+  static const needHelpBody =
+      'Our safety team will review this ride. Do you need help right now?';
+  static const needHelpNo = "I'm safe for now";
+  static const needHelpYes = 'Yes, get help';
+  static const shout =
+      "If you're in danger, shout TOLONG. Our safety team is listening.";
+  static const live = 'Our safety team is following this ride live.';
+  static const safeRideSetting =
+      'Record my rides. Only shared if something serious happens.';
+  static const noRideWaiting =
+      'No ride is waiting for you yet. Ask the rider to start their ride first.';
+
   static const helpSent =
       "We're on it. Our safety team will contact you right away.";
   static const reportSent =
@@ -50,6 +66,32 @@ abstract final class SafetyText {
   static const okThanks =
       "Glad you're okay. We're still here if anything changes.";
 }
+
+/// After a report: true for "Yes, get help", false for "I'm safe for now", null if dismissed.
+Future<bool?> askNeedHelp(BuildContext context, {required bool driver}) =>
+    showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        icon: const Icon(Icons.flag, color: GoSafeColors.unsafe),
+        title: Text(
+          driver
+              ? "We've reported this passenger"
+              : "We've reported this driver",
+        ),
+        content: const Text(SafetyText.needHelpBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text(SafetyText.needHelpNo),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(backgroundColor: GoSafeColors.sos),
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text(SafetyText.needHelpYes),
+          ),
+        ],
+      ),
+    );
 
 /// Returns true for "I'm okay", false for "I need help", null if dismissed.
 Future<bool?> askAreYouOk(BuildContext context) => showDialog<bool>(

@@ -14,6 +14,7 @@ export function IncidentList({ incidents }: { incidents: Incident[] }) {
             className="block rounded-card border border-line bg-canvas p-5 transition hover:border-brand hover:shadow-low"
           >
             <div className="flex flex-wrap items-center gap-2 text-body-small">
+              {i.live && <span className="animate-pulse rounded-chip bg-sos px-2 py-0.5 font-semibold text-white">● LIVE</span>}
               <span className={`rounded-chip px-2 py-0.5 font-semibold ${i.severity === "high" ? "bg-high text-white" : "bg-warn text-ink"}`}>
                 {i.severity === "high" ? "High" : "Medium"}
               </span>

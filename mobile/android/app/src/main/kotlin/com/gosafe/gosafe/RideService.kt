@@ -35,10 +35,10 @@ class RideService : Service() {
     }
 }
 
-/** Notification channels: the quiet "listening" one, and the "Are you okay?" alerts. */
+/** Notification channels: "listening", the silent buzz for "Are you okay?", and the loud alarm. */
 object Alerts {
     const val LISTENING = "listening"
-    private const val CHECKIN = "checkin"
+    private const val BUZZ = "buzz"
     private const val ALARM = "alarm"
     const val LISTENING_ID = 1
     private const val ALERT_ID = 2
@@ -53,9 +53,12 @@ object Alerts {
         return Notification.Builder(ctx, channel).setSmallIcon(R.drawable.ic_stat_gosafe).setContentIntent(open)
     }
 
-    /** loud: alarm sound on the alarm stream (plays in silent mode), repeating until answered. */
+    /**
+     * Not loud: vibration only, no sound, so the person sitting next to the user doesn't notice.
+     * Loud: alarm sound on the alarm stream (plays in silent mode), repeating until answered.
+     */
     fun show(ctx: Context, title: String, body: String, loud: Boolean) {
-        val n = builder(ctx, if (loud) ALARM else CHECKIN)
+        val n = builder(ctx, if (loud) ALARM else BUZZ)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(Notification.BigTextStyle().bigText(body))
@@ -71,9 +74,16 @@ object Alerts {
     // A channel's sound can't change after it's created, so each kind of alert has its own.
     private fun channels(ctx: Context) {
         val nm = ctx.getSystemService(NotificationManager::class.java)
-        if (nm.getNotificationChannel(ALARM) != null) return
+        if (nm.getNotificationChannel(BUZZ) != null) return
         nm.createNotificationChannel(NotificationChannel(LISTENING, "Ride listening", NotificationManager.IMPORTANCE_LOW))
-        nm.createNotificationChannel(NotificationChannel(CHECKIN, "Are you okay?", NotificationManager.IMPORTANCE_HIGH))
+        nm.deleteNotificationChannel("checkin") // replaced by the silent buzz
+        nm.createNotificationChannel(
+            NotificationChannel(BUZZ, "Are you okay? (silent)", NotificationManager.IMPORTANCE_HIGH).apply {
+                setSound(null, null)
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 300, 200, 300)
+            },
+        )
         nm.createNotificationChannel(
             NotificationChannel(ALARM, "Danger alarm", NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(

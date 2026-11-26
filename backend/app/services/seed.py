@@ -22,7 +22,7 @@ USERS = [
     {"uid": "agent2", "role": "agent", "displayName": "Agent Arif"},
 ]
 
-COLLECTIONS = ["users", "trips", "incidents", "checkins", "auditLogs"]
+COLLECTIONS = ["users", "trips", "incidents", "auditLogs"]
 
 
 def email(uid: str) -> str:
@@ -56,17 +56,18 @@ def seed_data() -> dict:
         "consent": {"rider": True, "driver": True},
         "startedAt": start,
         "endedAt": start + timedelta(seconds=ride["durationSec"]),
-        "recording": {
-            "path": "recordings/GR-DEMO-1.m4a",
+        "recordings": {"rider": {
             "contentType": ride["contentType"],
+            "pieces": 1,
+            "live": False,
             "durationSec": ride["durationSec"],
             "markers": ride["markers"],
             "transcript": ride["transcript"],
             "status": "uploaded",
             "uploadedBy": "rider1",
-            "createdAt": now - timedelta(minutes=2),
-            "uploadedAt": now - timedelta(minutes=2),
-        },
+            "updatedAt": now - timedelta(minutes=2),
+            "review": None,
+        }},
     })
 
     window = [line for line in ride["transcript"] if line["at"] <= 22.0]
@@ -96,8 +97,8 @@ def seed_data() -> dict:
     })
 
     batch.commit()
-    storage.upload_bytes("recordings/GR-DEMO-1.m4a", (FIXTURES / "demo-ride.m4a").read_bytes(), ride["contentType"])
-    review_recording("GR-DEMO-1")
+    storage.upload_bytes("recordings/GR-DEMO-1/rider/000000.m4a", (FIXTURES / "demo-ride.m4a").read_bytes(), ride["contentType"])
+    review_recording("GR-DEMO-1", "rider")
     return {"users": len(USERS), "trips": 1, "incidents": 1}
 
 

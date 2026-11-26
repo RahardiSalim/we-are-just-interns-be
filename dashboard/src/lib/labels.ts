@@ -9,7 +9,7 @@ export const labelText: Record<Label, string> = {
 
 export const triggerText: Record<Incident["trigger"], string> = {
   sos: "SOS",
-  manual_unsafe: "I feel unsafe",
+  manual_unsafe: "Reported",
   auto: "Auto-detected on phone",
 };
 
@@ -31,5 +31,6 @@ export const isHarmful = (l: Label | null | undefined) => !!l && harmful.has(l);
 
 /** Queue order: high severity first, then newest. */
 export const byPriority = (a: Incident, b: Incident) =>
+  Number(!!b.live) - Number(!!a.live) || // a phone streaming an emergency comes first
   Number(b.severity === "high") - Number(a.severity === "high") ||
   b.createdAt.toDate().getTime() - a.createdAt.toDate().getTime();

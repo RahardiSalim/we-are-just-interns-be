@@ -7,7 +7,15 @@ import { LoginForm } from "@/components/LoginForm";
 import { api } from "@/lib/api";
 import { db } from "@/lib/firebase";
 import { useAgent } from "@/lib/useAgent";
-import type { Incident, Trip } from "@/types/firestore";
+import type { Incident, Phone, Trip } from "@/types/firestore";
+
+/** Every uploaded piece of one phone's recording, joined into one playable file (ADTS pieces join byte for byte). */
+async function loadPieces(tripId: string, phone: Phone): Promise<string> {
+  const rec = (await api.recordingUrls(tripId))[phone];
+  if (!rec) throw new Error("no uploaded audio from this phone yet");
+  const parts = await Promise.all(rec.urls.map((u) => fetch(u).then((r) => (r.ok ? r.blob() : Promise.reject(r.status)))));
+  return URL.createObjectURL(new Blob(parts, { type: rec.contentType }));
+}
 
 export default function LiveCase({ id }: { id: string }) {
   const { user, notice } = useAgent();
@@ -49,7 +57,7 @@ export default function LiveCase({ id }: { id: string }) {
     <CaseView
       incident={incident}
       trip={trip}
-      loadAudio={() => api.recordingUrl(incident.tripId)}
+      loadAudio={(phone) => loadPieces(incident.tripId, phone)}
       onDecide={(action, note) => api.decide(id, action, note)}
     />
   );

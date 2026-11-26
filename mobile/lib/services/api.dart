@@ -45,14 +45,20 @@ class Api {
   Future<Map<String, dynamic>> _post(
     String path, [
     Map<String, Object?>? body,
+  ]) => _send('POST', path, body);
+
+  Future<Map<String, dynamic>> _send(
+    String method,
+    String path, [
+    Map<String, Object?>? body,
   ]) async {
-    final res = await _http.post(
-      Uri.parse('$baseUrl$path'),
-      headers: {
-        'Authorization': 'Bearer ${await token()}',
-        'Content-Type': 'application/json',
-      },
-      body: jsonEncode(body ?? {}),
+    final req = http.Request(method, Uri.parse('$baseUrl$path'))
+      ..headers['Authorization'] = 'Bearer ${await token()}'
+      ..headers['Content-Type'] = 'application/json'
+      ..body = jsonEncode(body ?? {});
+    // A dead connection must fail, not hang: the callers retry, and an SOS shows the 112 banner.
+    final res = await http.Response.fromStream(
+      await _http.send(req).timeout(const Duration(seconds: 15)),
     );
     if (res.statusCode >= 300) throw ApiException(res.statusCode, res.body);
     return jsonDecode(res.body) as Map<String, dynamic>;
@@ -60,15 +66,22 @@ class Api {
 
   /// Starts a ride with the rider's answer to the consent prompt. The driver opted in earlier in their
   /// settings. Without an order ID the backend makes one up (demo); in production pass GoJek's.
+  /// A driver's phone joins the rider's trip (`role: driver`); its consent is the Safe Ride setting.
   Future<String> startTrip({
-    required bool riderConsent,
+    bool riderConsent = false,
+    String role = 'rider',
     String? orderId,
   }) async =>
       (await _post('/trips', {
             'riderConsent': riderConsent,
+            'role': role,
             'orderId': ?orderId,
           }))['tripId']
           as String;
+
+  /// The driver's Safe Ride setting: their consent to record rides.
+  Future<void> setSafeRide(bool on) =>
+      _post('/me/consent', {'audioConsent': on});
 
   Future<void> endTrip(String tripId) => _post('/trips/$tripId/end');
 
@@ -96,37 +109,50 @@ class Api {
       },
     });
     final id = created['incidentId'] as String;
+    // The ride already had an open case (this phone or the other one): the report joined it.
+    if (created['merged'] == true) return id;
     // shortcut: no audio yet (input is mocked), so nothing goes to uploadUrl before finalize.
     await _post('/incidents/$id/finalize');
     return id;
   }
 
-  /// After the ride: the full audio plus the moments an agent should check.
-  /// `transcript`: everything speech-to-text heard, timed from the recording start.
-  Future<void> uploadRecording(RideMeta ride, Uint8List audio) async {
-    final tripId = ride.tripId;
-    final target = await _post('/trips/$tripId/recording', {
-      'durationSec': ride.durationSec,
-      'contentType': ride.contentType,
-      'markers': ride.markers,
-      'transcript': ride.transcript,
-    });
+  /// This phone's recording details: markers, transcript and how many pieces are up.
+  /// Sent before the first piece, and again as pieces go up.
+  Future<void> saveRecording(
+    RideMeta ride, {
+    required int pieces,
+    required bool live,
+    required bool done,
+  }) => _send('PUT', '/trips/${ride.tripId}/recording', {
+    'durationSec': ride.durationSec,
+    'contentType': ride.contentType,
+    'markers': ride.markers,
+    'transcript': ride.transcript,
+    'pieces': pieces,
+    'live': live,
+    'done': done,
+  });
+
+  /// Uploads audio piece [n]. Sending it twice overwrites it, so retries are safe.
+  Future<void> uploadPiece(
+    String tripId,
+    int n,
+    String contentType,
+    Uint8List bytes,
+  ) async {
+    final target = await _post('/trips/$tripId/recording/pieces/$n');
     final put =
         http.Request(
             target['uploadMethod'] as String,
             Uri.parse(target['uploadUrl'] as String),
           )
-          ..headers['Content-Type'] = ride.contentType
-          ..bodyBytes = audio;
-    final res = await _http.send(put);
+          ..headers['Content-Type'] = contentType
+          ..bodyBytes = bytes;
+    final res = await _http.send(put).timeout(const Duration(seconds: 30));
     if (res.statusCode >= 300) {
       throw ApiException(res.statusCode, await res.stream.bytesToString());
     }
-    await _post('/trips/$tripId/recording/done');
   }
-
-  Future<void> replyCheckin(String checkinId, bool ok) =>
-      _post('/checkins/$checkinId/reply', {'answer': ok ? 'ok' : 'need_help'});
 }
 
 extension on String {

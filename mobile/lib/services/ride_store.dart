@@ -4,6 +4,19 @@ import 'dart:typed_data';
 /// How long the phone keeps a ride (audio and details), then deletes it. Matches the consent text.
 const keepFor = Duration(days: 7);
 
+/// How much of a ride leaves the phone. It only ever goes up during a ride.
+enum Share {
+  /// Nothing: kept encrypted on the phone for 7 days.
+  local,
+
+  /// The whole ride (audio, transcript, flags) when it ends: after a report or a high flag.
+  atEnd,
+
+  /// Streamed to an agent while the ride is on: after an SOS, "I need help", the safe phrase,
+  /// a shout for help, or a high flag nobody answered for 60 seconds.
+  live,
+}
+
 /// What the phone keeps about one ride next to its audio, saved as the ride goes,
 /// so a crash or a killed app loses at most the last piece.
 class RideMeta {
@@ -11,6 +24,9 @@ class RideMeta {
     required this.tripId,
     required this.startedAt,
     required this.contentType,
+    this.role = 'rider',
+    this.share = Share.local,
+    this.piecesSent = 0,
     this.durationSec = 0,
     this.ended = false,
     this.uploaded = false,
@@ -22,6 +38,13 @@ class RideMeta {
   final String tripId;
   final DateTime startedAt;
   final String contentType;
+
+  /// Whose phone: `rider` or `driver`.
+  final String role;
+  Share share;
+
+  /// Audio pieces already uploaded (pieces are numbered from 0).
+  int piecesSent;
   double durationSec;
   bool ended;
   bool uploaded;
@@ -32,14 +55,13 @@ class RideMeta {
   /// `{at, text}` per line heard, seconds from the start of the recording.
   final List<Map<String, Object?>> transcript;
 
-  /// Only a ride with a high flag or an SOS sends its recording.
-  bool get flagged =>
-      markers.any((m) => m['kind'] == 'high' || m['kind'] == 'sos');
-
   Map<String, Object?> toJson() => {
     'tripId': tripId,
     'startedAt': startedAt.toUtc().toIso8601String(),
     'contentType': contentType,
+    'role': role,
+    'share': share.name,
+    'piecesSent': piecesSent,
     'durationSec': durationSec,
     'ended': ended,
     'uploaded': uploaded,
@@ -51,6 +73,9 @@ class RideMeta {
     tripId: j['tripId'] as String,
     startedAt: DateTime.parse(j['startedAt'] as String),
     contentType: j['contentType'] as String,
+    role: j['role'] as String? ?? 'rider',
+    share: Share.values.byName(j['share'] as String? ?? 'local'),
+    piecesSent: j['piecesSent'] as int? ?? 0,
     durationSec: (j['durationSec'] as num).toDouble(),
     ended: j['ended'] as bool,
     uploaded: j['uploaded'] as bool,
@@ -68,8 +93,9 @@ class RideMeta {
 abstract interface class RideStore {
   Future<void> addPiece(String tripId, int index, Uint8List bytes);
 
-  /// All pieces in order, joined. AAC in ADTS frames joins byte for byte.
-  Future<Uint8List> audio(String tripId);
+  /// How many audio pieces the ride has (numbered from 0).
+  Future<int> pieceCount(String tripId);
+  Future<Uint8List> piece(String tripId, int index);
   Future<void> save(RideMeta meta);
   Future<List<RideMeta>> rides();
   Future<void> delete(String tripId);
@@ -97,14 +123,11 @@ class MemoryRideStore implements RideStore {
       (_pieces[tripId] ??= {})[index] = bytes;
 
   @override
-  Future<Uint8List> audio(String tripId) async {
-    final p = _pieces[tripId] ?? {};
-    final b = BytesBuilder(copy: false);
-    for (final i in p.keys.toList()..sort()) {
-      b.add(p[i]!);
-    }
-    return b.takeBytes();
-  }
+  Future<int> pieceCount(String tripId) async => _pieces[tripId]?.length ?? 0;
+
+  @override
+  Future<Uint8List> piece(String tripId, int index) async =>
+      _pieces[tripId]![index]!;
 
   @override
   Future<void> save(RideMeta meta) async => _meta[meta.tripId] = meta.encode();

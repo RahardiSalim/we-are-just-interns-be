@@ -106,9 +106,9 @@ def _by_rules(lines: list[dict], duration: float) -> dict:
     return {"source": "rules", "summary": summary, "label": label, "confidence": score, "moments": moments}
 
 
-def review_recording(trip_id: str) -> None:
+def review_recording(trip_id: str, role: str) -> None:
     ref = db().document("trips", trip_id)
-    rec = ref.get().to_dict()["recording"]
+    rec = ref.get().to_dict()["recordings"][role]
     lines = [{**line, "text": mask(line["text"])} for line in rec.get("transcript", [])]
     if not lines:
         return
@@ -126,4 +126,4 @@ def review_recording(trip_id: str) -> None:
     if not result:
         note = (note + " " if note else "No AI model is connected yet. ") + "Rule-based review shown."
         result = _by_rules(lines, rec.get("durationSec", 0))
-    ref.update({"recording.review": {**result, "note": note, "createdAt": datetime.now(timezone.utc)}})
+    ref.update({f"recordings.{role}.review": {**result, "note": note, "createdAt": datetime.now(timezone.utc)}})

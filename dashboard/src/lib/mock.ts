@@ -85,9 +85,10 @@ export const mockTrips: Record<string, Trip> = {
     mode: "goride",
     status: "ended",
     consent: { rider: true, driver: true },
-    recording: {
-      path: "recordings/GR-DEMO-1.m4a",
+    recordings: { rider: {
       contentType: ride.contentType,
+      pieces: 1,
+      live: false,
       durationSec: ride.durationSec,
       markers: ride.markers as Marker[],
       transcript: ride.transcript,
@@ -104,6 +105,6 @@ export const mockTrips: Record<string, Trip> = {
         ],
         note: "No AI model is connected yet. Rule-based review shown.",
       },
-    },
+    } },
   },
 };
