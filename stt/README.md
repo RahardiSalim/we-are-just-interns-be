@@ -21,6 +21,7 @@ Speech-to-text module for GoSafe: audio file → voice-activity segments → spe
 | `tests/` | Unit tests. They need only numpy, scipy and soundfile (no torch) |
 | `HANDOFF.md` | Where the work stands for whoever continues: what exists, decisions made and open, next steps, what is only on one laptop ([HANDOFF.md](HANDOFF.md)) |
 | `tools/` | Scripts for the DataHive real phone conversations: `datahive_run.py` runs the pipeline per channel, `datahive_analyze.py` reports hallucinations, speaker changes and classifier alarms |
+| `tools/simulate_ride.py` | Plays a recording as if it were the rider's phone: STT, classifier per line, then the real API calls (trip, incident, recording upload), so the case shows on the dashboard. `--dry-run` sends nothing. Header lists what it needs; it writes real data to the project the API points at |
 | `models/` | Model candidates for the phone, pinned by revision and hash, with measured accuracy ([models/README.md](models/README.md)) |
 | `LLM_INTEGRATION.md` | How an LLM or a service in front of an LLM should use this module: input, how it works, output, how to read it ([LLM_INTEGRATION.md](LLM_INTEGRATION.md)) |
 
