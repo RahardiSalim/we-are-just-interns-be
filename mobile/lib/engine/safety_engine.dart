@@ -33,10 +33,14 @@ class Marker {
 }
 
 class Decision {
-  const Decision(this.action, this.verdict, this.window);
+  const Decision(this.action, this.verdict, this.window, {this.nth = 0});
   final SafetyAction action;
   final Verdict verdict;
   final List<Line> window; // the evidence: the last 15 s of transcript
+
+  /// Which time this is on the ride: the 1st, 2nd, 3rd warning (or high flag). Each step does more;
+  /// see "The ladder" in mobile/README.md.
+  final int nth;
 }
 
 /// The phone's judgement: transcript in, warn / high / nothing out.
@@ -49,17 +53,20 @@ class SafetyEngine {
     this.warnAt = 0.6,
     this.highAt = 0.8,
     this.window = const Duration(seconds: 15),
-    this.warnCooldown = const Duration(minutes: 10),
+    this.warningsToHigh = 3,
   }) : _clock = clock ?? DateTime.now;
 
   final Classifier classifier;
   final double warnAt, highAt;
-  final Duration window, warnCooldown;
+  final Duration window;
+
+  /// The warning that counts as a high flag: repeated discomfort is serious on its own.
+  final int warningsToHigh;
   final DateTime Function() _clock;
 
   final _heard = <(DateTime, String)>[];
-  DateTime? _lastWarning;
-  bool _reported = false;
+  int _warnings = 0;
+  int _highs = 0;
 
   static const _harmful = {Label.threat, Label.sexualHarassment};
 
@@ -82,22 +89,32 @@ class SafetyEngine {
           flagged: verdict.flagged[i],
         ),
     ];
-    return Decision(_decide(verdict, now), verdict, lines);
+    final action = _decide(verdict);
+    return Decision(
+      action,
+      verdict,
+      lines,
+      nth: switch (action) {
+        SafetyAction.warn => _warnings,
+        SafetyAction.high => _highs,
+        SafetyAction.none => 0,
+      },
+    );
   }
 
-  SafetyAction _decide(Verdict v, DateTime now) {
-    if (_reported) {
-      return SafetyAction
-          .none; // one automatic report per trip; the case is with an agent
-    }
+  SafetyAction _decide(Verdict v) {
+    // Only a new offending line counts: the same remark staying in the 15 s window isn't a repeat.
+    if (v.flagged.isEmpty || !v.flagged.last) return SafetyAction.none;
     if (_harmful.contains(v.label) && v.score >= highAt) {
-      _reported = true;
+      _highs++;
       return SafetyAction.high;
     }
-    final cooling =
-        _lastWarning != null && now.difference(_lastWarning!) < warnCooldown;
-    if (v.label != Label.normal && v.score >= warnAt && !cooling) {
-      _lastWarning = now;
+    if (v.label != Label.normal && v.score >= warnAt) {
+      _warnings++;
+      if (_warnings >= warningsToHigh) {
+        _highs++;
+        return SafetyAction.high;
+      }
       return SafetyAction.warn;
     }
     return SafetyAction.none;

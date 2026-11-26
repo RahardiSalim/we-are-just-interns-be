@@ -43,8 +43,8 @@ Agreed 2026-11-26. **The mobile app is the core:** everything from speech-to-tex
 
 | Level | When | What happens |
 |---|---|---|
-| Warning | `score` ≥ warning threshold | A kind, neutral message on the phone with "I'm fine" and "Report". At most once every 10 minutes. Nothing is sent; the moment is marked on the phone. |
-| High | `score` ≥ high threshold for `threat` / `sexual_harassment` | The flag goes to the backend **immediately** (`trigger: auto`), escalated for an agent. The phone asks "Are you okay?", **quietly first**: vibration only, every 10 s. No answer at **60 s**: the phone goes **Live**. No answer at **120 s**: the loud alarm, and "shout TOLONG", which then counts as "I need help". |
+| Warning | A new line with `score` ≥ warning threshold | A kind, neutral message on the phone with "I'm fine" and "Report"; nothing is sent, the moment is marked on the phone. The **2nd** warning on a ride is firmer and the recording uploads at the end (the backend accepts a ride with 2+ warnings); the **3rd** counts as a high flag. See mobile/README.md "The ladder". |
+| High | `score` ≥ high threshold for `threat` / `sexual_harassment` | The flag goes to the backend **immediately** (`trigger: auto`), escalated for an agent. The phone asks "Are you okay?", **quietly first**: vibration only, every 10 s. No answer at **60 s**: the phone goes **Live**. No answer at **120 s**: the loud alarm, and "shout TOLONG", which then counts as "I need help". The **2nd** high flag on a ride joins the same case and goes **Live** ("Are you still okay?"); the **3rd** sends an SOS. |
 | Report driver / Report passenger | A person presses it, any time, or "Report" on a warning | Sent immediately (`trigger: manual_unsafe`), then "Do you need help right now?": "Yes, get help" is an SOS. |
 | SOS | The SOS button, "I need help", the safe phrase, or a shout for help | Sent immediately and the phone goes **Live**. The buttons are always on screen and never wait for the model. |
 
@@ -52,9 +52,9 @@ Agreed 2026-11-26. **The mobile app is the core:** everything from speech-to-tex
 
 | Level | What leaves the phone | Reached by |
 |---|---|---|
-| Local | Nothing. Audio, transcript and flags stay encrypted on the phone for 7 days | Ride start, warnings, "I'm fine" |
-| At end | When the ride ends: every audio piece, the transcript and every flag, so the cloud computes nothing again | A report; a high flag |
-| Live | Now: every piece so far, transcript and flags; then each new 10-second piece and line until the ride ends | SOS, "I need help", "Yes, get help", the safe phrase, a shout for help, a high flag unanswered for 60 s |
+| Local | Nothing. Audio, transcript and flags stay encrypted on the phone for 7 days | Ride start, the 1st warning, "I'm fine" |
+| At end | When the ride ends: every audio piece, the transcript and every flag, so the cloud computes nothing again | A report; the 2nd warning; a high flag |
+| Live | Now: every piece so far, transcript and flags; then each new 10-second piece and line until the ride ends | SOS, "I need help", "Yes, get help", the safe phrase, a shout for help, a high flag unanswered for 60 s, the 2nd high flag |
 
 Both phones (rider and driver) run the same app and logic and each uploads its own recording. Reports from either phone about the same ride join **one case**.
 

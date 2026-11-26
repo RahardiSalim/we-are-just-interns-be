@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gosafe/engine/safe_phrase.dart';
 import 'package:gosafe/engine/safety_engine.dart';
+import 'package:gosafe/engine/scenarios.dart';
 import 'package:gosafe/features/safety/are_you_ok.dart';
 import 'package:gosafe/features/trip/trip_screen.dart';
 import 'package:gosafe/services/api.dart';
@@ -110,6 +111,9 @@ class FakeRecorder implements TripRecorder {
   void goLive() => live = true;
 
   @override
+  Stream<double> get level => const Stream.empty();
+
+  @override
   Future<Duration> stop() async {
     state = 'stopped';
     return const Duration(seconds: 25);
@@ -124,6 +128,7 @@ class Harness {
   final alerts = <String>[];
   final dialed = <String>[];
   bool driverSafeRide = true;
+  SafetyEngine Function()? engine;
 
   Future<void> pump(WidgetTester tester) async {
     await tester.pumpWidget(
@@ -133,6 +138,7 @@ class Harness {
           recorder: recorder,
           store: store,
           listen: () => heard.stream,
+          engine: engine,
           tripInfo: (_) async => (
             riderConsent: !api.calls.contains('start:false'),
             driverConsent: driverSafeRide,
@@ -148,10 +154,11 @@ class Harness {
   }
 
   Future<void> startRide(WidgetTester tester, {bool consent = true}) async {
-    await tester.tap(find.text('Start ride'));
+    await tapIn(tester, find.text('Start ride'));
     await tester.pumpAndSettle();
     expect(find.text(SafetyText.consentTitle), findsOneWidget);
-    await tester.tap(
+    await tapIn(
+      tester,
       find.text(consent ? SafetyText.consentYes : SafetyText.consentNo),
     );
     await tester.pumpAndSettle();
@@ -164,9 +171,16 @@ class Harness {
   }
 
   Future<void> endRide(WidgetTester tester) async {
-    await tester.tap(find.text('End ride'));
+    await tapIn(tester, find.text('End ride'));
     await tester.pumpAndSettle();
   }
+}
+
+/// The ride screen is a sheet over a map: scroll a button into view before tapping it.
+Future<void> tapIn(WidgetTester tester, Finder finder) async {
+  await tester.ensureVisible(finder);
+  await tester.pump();
+  await tester.tap(finder);
 }
 
 const uncomfortable = 'Mbak udah punya pacar belum?';
@@ -185,7 +199,10 @@ void main() {
       expect(find.textContaining('Recording on'), findsOneWidget);
       expect(find.text('Your driver has Safe Ride on'), findsOneWidget);
       await h.say(tester, 'Selamat sore Mbak.');
-      expect(find.text('Selamat sore Mbak.'), findsOneWidget);
+      // Heard lines go to the ride's transcript for the safety team; the rider never sees them.
+      expect(find.text('Selamat sore Mbak.'), findsNothing);
+      final ride = (await h.store.rides()).single;
+      expect(ride.transcript.single['text'], 'Selamat sore Mbak.');
     },
   );
 
@@ -200,7 +217,7 @@ void main() {
     expect(h.recorder.state, 'idle');
     expect(h.heard.hasListener, isFalse, reason: 'never opened');
     expect(find.textContaining('Not recording'), findsOneWidget);
-    await tester.tap(find.text('SOS'));
+    await tapIn(tester, find.text('SOS'));
     await tester.pump();
     expect(h.api.reports.single.$1, 'sos');
   });
@@ -232,6 +249,9 @@ void main() {
       await h.say(tester, uncomfortable);
       expect(find.text(SafetyText.warning), findsOneWidget);
       expect(h.alerts, isEmpty, reason: 'a warning never buzzes');
+      await tapIn(tester, find.text(SafetyText.warningFine));
+      await tester.pumpAndSettle();
+      expect(find.text(SafetyText.warning), findsNothing);
       await h.endRide(tester);
 
       expect(h.api.reports, isEmpty);
@@ -252,11 +272,11 @@ void main() {
       await h.pump(tester);
       await h.startRide(tester);
       await h.say(tester, uncomfortable);
-      await tester.tap(find.text(SafetyText.warningReport));
+      await tapIn(tester, find.text(SafetyText.warningReport));
       await tester.pumpAndSettle();
       expect(h.api.reports.single.$1, 'manual_unsafe');
       expect(find.text("We've reported this driver"), findsOneWidget);
-      await tester.tap(find.text(SafetyText.needHelpNo));
+      await tapIn(tester, find.text(SafetyText.needHelpNo));
       await tester.pumpAndSettle();
       expect(find.text(SafetyText.reportThanks), findsOneWidget);
       expect(h.api.saves, isEmpty, reason: 'nothing streams for a report');
@@ -278,11 +298,12 @@ void main() {
     final h = Harness();
     await h.pump(tester);
     await h.startRide(tester);
-    await tester.tap(
+    await tapIn(
+      tester,
       find.text('Report driver'),
     ); // the button, no warning needed
     await tester.pumpAndSettle();
-    await tester.tap(find.text(SafetyText.needHelpYes));
+    await tapIn(tester, find.text(SafetyText.needHelpYes));
     await tester.pumpAndSettle();
 
     expect(h.api.reports.map((r) => r.$1), ['manual_unsafe', 'sos']);
@@ -304,7 +325,7 @@ void main() {
       expect(trigger, 'auto');
       expect(evidence!.verdict.label, Label.sexualHarassment);
       expect(h.alerts, ['buzz'], reason: 'silent first');
-      await tester.tap(find.text(SafetyText.askOk));
+      await tapIn(tester, find.text(SafetyText.askOk));
       await tester.pumpAndSettle();
       expect(h.alerts, ['buzz', 'clear']);
       await h.endRide(tester);
@@ -324,7 +345,7 @@ void main() {
     await h.pump(tester);
     await h.startRide(tester);
     await h.say(tester, harassment);
-    await tester.tap(find.text(SafetyText.askHelp));
+    await tapIn(tester, find.text(SafetyText.askHelp));
     await tester.pumpAndSettle();
     expect(h.api.reports.map((r) => r.$1), ['auto', 'sos']);
     expect(h.recorder.live, isTrue);
@@ -374,7 +395,7 @@ void main() {
     await h.pump(tester);
     await h.startRide(tester);
     await h.say(tester, harassment);
-    await tester.tap(find.text(SafetyText.askOk));
+    await tapIn(tester, find.text(SafetyText.askOk));
     await tester.pumpAndSettle();
     h.api.failUploads = 1;
     await h.endRide(tester);
@@ -436,10 +457,10 @@ void main() {
       await h.pump(tester);
       await h.startRide(tester);
       h.api.failReports = 2;
-      await tester.tap(find.text('SOS'));
+      await tapIn(tester, find.text('SOS'));
       await tester.pump();
       expect(find.text(SafetyText.sosOffline), findsOneWidget);
-      await tester.tap(find.text(SafetyText.call112));
+      await tapIn(tester, find.text(SafetyText.call112));
       expect(h.dialed, ['112']);
 
       await tester.pump(
@@ -474,10 +495,10 @@ void main() {
     (tester) async {
       final h = Harness();
       await h.pump(tester);
-      await tester.tap(find.text('Driver'));
+      await tapIn(tester, find.text('Driver'));
       await tester.pumpAndSettle();
       expect(find.text('Safe Ride'), findsOneWidget);
-      await tester.tap(find.text('Start ride'));
+      await tapIn(tester, find.text('Start ride'));
       await tester.pumpAndSettle();
 
       expect(find.text(SafetyText.consentTitle), findsNothing);
@@ -493,9 +514,9 @@ void main() {
   ) async {
     final h = Harness()..api.rideWaiting = false;
     await h.pump(tester);
-    await tester.tap(find.text('Driver'));
+    await tapIn(tester, find.text('Driver'));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('Start ride'));
+    await tapIn(tester, find.text('Start ride'));
     await tester.pumpAndSettle();
     expect(find.text(SafetyText.noRideWaiting), findsOneWidget);
     expect(h.recorder.state, 'idle');
@@ -506,13 +527,13 @@ void main() {
     (tester) async {
       final h = Harness();
       await h.pump(tester);
-      await tester.tap(find.text('Change'));
+      await tapIn(tester, find.text('Change'));
       await tester.pumpAndSettle();
       await tester.enterText(
         find.byType(TextField),
         'Mas, AC-nya dingin banget ya',
       );
-      await tester.tap(find.text('Save'));
+      await tapIn(tester, find.text('Save'));
       await tester.pumpAndSettle();
       expect(await h.store.safePhrase(), 'Mas, AC-nya dingin banget ya');
       expect(find.text(SafetyText.safePhraseSaved), findsOneWidget);
@@ -531,10 +552,10 @@ void main() {
   testWidgets('a too-short safe phrase is refused', (tester) async {
     final h = Harness();
     await h.pump(tester);
-    await tester.tap(find.text('Change'));
+    await tapIn(tester, find.text('Change'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField), 'tolong');
-    await tester.tap(find.text('Save'));
+    await tapIn(tester, find.text('Save'));
     await tester.pumpAndSettle();
     expect(find.textContaining('at least 4 words'), findsOneWidget);
     expect(await h.store.safePhrase(), isNull);
@@ -547,8 +568,147 @@ void main() {
     await h.store.setSafePhrase('Bang, helmnya kebesaran nih kayaknya');
     await h.pump(tester);
     await tester.pump();
-    await tester.tap(find.text('Driver'));
+    await tapIn(tester, find.text('Driver'));
     await tester.pumpAndSettle();
     expect(find.textContaining('helmnya kebesaran'), findsOneWidget);
+  });
+
+  // The test rides from stt/dialog_script.csv (lib/engine/scenarios.dart): the model's label for
+  // each real sentence goes into the real engine, and each step of the ladder shows its pop-up
+  // and does its part with the recording (mobile/README.md "The ladder").
+  group('scenarios', () {
+    Future<Harness> play(WidgetTester tester, String name) async {
+      final scenario = scenarioNamed(name)!;
+      final h = Harness()
+        ..engine = () => SafetyEngine(classifier: ScenarioClassifier(scenario));
+      await h.pump(tester);
+      await h.startRide(tester);
+      for (final (text, _) in scenario.lines) {
+        await h.say(tester, text);
+      }
+      return h;
+    }
+
+    Future<List<String>> markersOnPhone(Harness h) async => [
+      for (final m in (await h.store.rides()).single.markers)
+        m['kind'] as String,
+    ];
+
+    testWidgets('nothing: no pop-up, nothing sent, kept on the phone 7 days', (
+      tester,
+    ) async {
+      final h = await play(tester, 'none');
+      expect(find.text(SafetyText.warning), findsNothing);
+      expect(find.text(SafetyText.askTitle), findsNothing);
+      await h.endRide(tester);
+      expect(h.api.reports, isEmpty);
+      expect(h.api.saves, isEmpty, reason: 'the recording stays on the phone');
+      expect(find.text(SafetyText.keptOnPhone), findsOneWidget);
+      expect(await markersOnPhone(h), isEmpty);
+    });
+
+    testWidgets(
+      'warning once: the kind warning, the recording stays on the phone',
+      (tester) async {
+        final h = await play(tester, 'warning1');
+        expect(find.text(SafetyText.warning), findsOneWidget);
+        await tapIn(tester, find.text(SafetyText.warningFine));
+        await tester.pumpAndSettle();
+        await h.endRide(tester);
+        expect(h.api.reports, isEmpty);
+        expect(h.api.saves, isEmpty);
+        expect(find.text(SafetyText.keptOnPhone), findsOneWidget);
+        expect(await markersOnPhone(h), ['warning']);
+      },
+    );
+
+    testWidgets(
+      'warning twice: a firmer warning, the recording goes to the team at the end',
+      (tester) async {
+        final h = await play(tester, 'warning2');
+        expect(find.text(SafetyText.warningAgain), findsOneWidget);
+        expect(h.api.reports, isEmpty, reason: 'no case during the ride yet');
+        await tapIn(tester, find.text(SafetyText.warningFine));
+        await tester.pumpAndSettle();
+        await h.endRide(tester);
+        expect(h.api.saves.last, endsWith(':done'));
+        expect(h.api.kinds, ['warning', 'warning']);
+        expect(find.text(SafetyText.recordingSent), findsOneWidget);
+      },
+    );
+
+    testWidgets(
+      'warning three times: counts as high, a case now and "Are you okay?"',
+      (tester) async {
+        final h = await play(tester, 'warning3');
+        expect(find.text(SafetyText.askTitle), findsOneWidget);
+        expect(h.api.reports.map((r) => r.$1), ['auto']);
+        await tapIn(tester, find.text(SafetyText.askOk));
+        await tester.pumpAndSettle();
+        await h.endRide(tester);
+        expect(h.api.kinds, ['warning', 'warning', 'high']);
+        expect(h.api.saves.last, endsWith(':done'));
+      },
+    );
+
+    testWidgets(
+      'high once: a case now, "Are you okay?", the recording at the end',
+      (tester) async {
+        final h = await play(tester, 'high1');
+        expect(find.text(SafetyText.askTitle), findsOneWidget);
+        expect(h.api.reports.map((r) => r.$1), ['auto']);
+        expect(h.recorder.live, isFalse);
+        await tapIn(tester, find.text(SafetyText.askOk));
+        await tester.pumpAndSettle();
+        await h.endRide(tester);
+        expect(h.api.kinds, ['high']);
+        expect(h.api.saves.last, endsWith(':done'));
+      },
+    );
+
+    testWidgets(
+      'high twice: the same case again, Live, "Are you still okay?"',
+      (tester) async {
+        final h = await play(tester, 'high2');
+        expect(find.text(SafetyText.askAgainTitle), findsOneWidget);
+        expect(
+          find.text(SafetyText.askTitle),
+          findsNothing,
+          reason: 'the new check replaced the old',
+        );
+        expect(h.api.reports.map((r) => r.$1), ['auto', 'auto']);
+        expect(h.recorder.live, isTrue, reason: 'an agent can listen now');
+        expect(h.api.saves, isNotEmpty, reason: 'streaming already');
+        await tapIn(tester, find.text(SafetyText.askOk));
+        await tester.pumpAndSettle();
+        expect(find.text(SafetyText.live), findsOneWidget);
+        await h.endRide(tester);
+        expect(h.api.kinds, ['high', 'high']);
+      },
+    );
+
+    testWidgets('high three times: an SOS on the rider\'s behalf, Live', (
+      tester,
+    ) async {
+      final h = await play(tester, 'high3');
+      await tester.pumpAndSettle();
+      expect(h.api.reports.map((r) => r.$1), ['auto', 'auto', 'sos']);
+      expect(
+        find.text(SafetyText.askAgainTitle),
+        findsNothing,
+        reason: 'the SOS closed the check',
+      );
+      expect(
+        find.text(SafetyText.helpSentTitle),
+        findsOneWidget,
+        reason: 'a pop-up says so',
+      );
+      expect(find.text(SafetyText.helpSent), findsOneWidget);
+      expect(h.recorder.live, isTrue);
+      await tapIn(tester, find.text('OK'));
+      await tester.pumpAndSettle();
+      await h.endRide(tester);
+      expect(h.api.kinds, ['high', 'high', 'high', 'sos']);
+    });
   });
 }

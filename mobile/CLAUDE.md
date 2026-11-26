@@ -18,8 +18,9 @@ Follow the root [CLAUDE.md](../CLAUDE.md) rules. How the app works today, step b
 - Built natively, no Firebase: background recording, the alarm on a high flag (`TripScreen.alert`, loud), lock-screen "Are you okay?" for check-ins, and AES-GCM encryption of the recording with an Android Keystore key (`Vault.kt`).
 - The safe phrase is each user's own (home screen, stored encrypted via `RideStore.setSafePhrase`), matched fuzzily by `SafePhrase`.
 - Not built yet: FCM (push when the app is fully closed).
+- Look: Gojek light theme. Ride-screen pieces (`GoCard`, `AlertCard`, `ListeningLine`, `SosButton`, `DriverPhoto`, `HelpCard`, ...) live in `lib/features/trip/gojek_ui.dart`; images in `assets/illustrations/` and `assets/ride/`. The app opens straight on the ride (`TripScreen.autoStart`, `--dart-define=ROLE=driver` for the driver); tests keep the home screen. The ride is a draggable sheet over a drawn map (`ride_map.dart`), so tests tap through `tapIn` (scrolls into view first). Design preview with no backend: `flutter run -d chrome -t lib/preview.dart`. Keep every visible text the tests look for.
 - Style: only the tokens in `lib/theme.dart` (from [contracts/DESIGN.md](../contracts/DESIGN.md)); no raw colours or sizes in feature code. Safety colours mean the same as on the dashboard.
-- All user-facing wording lives in `SafetyText` (`lib/features/safety/are_you_ok.dart`): short, caring, never alarming. Never show messages as bottom snackbars: nothing may cover the SOS button.
+- All user-facing wording lives in `SafetyText` (`lib/features/safety/are_you_ok.dart`): short, caring, never alarming. Safety questions are Gojek bottom sheets (`showGoSheet` in `are_you_ok.dart`), one at a time through `TripScreen._showPopup`, each with its own help action; status messages are cards at the top. Never snackbars.
 - Firebase points at the local emulators (`USE_EMULATORS`, default true; `EMULATOR_HOST` defaults to 10.0.2.2 on Android, 127.0.0.1 on web).
 
 Commands (from `mobile/`):

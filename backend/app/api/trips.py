@@ -17,6 +17,7 @@ router = APIRouter(prefix="/trips", tags=["trips"])
 DEMO_DRIVER = "driver1"  # shortcut: a rider's trip starts with the seeded driver until a driver phone joins it
 # What makes a phone share its recording: a high flag, an SOS, or a report ("manual_unsafe").
 SHARE_WHEN = ("high", "sos", "manual_unsafe")
+WARNINGS_TO_SHARE = 2  # the second warning on a ride shares its recording (mobile/README.md "The ladder")
 OPEN = ("awaiting_upload", "processing", "escalated", "under_review")
 Label = Literal["normal", "uncomfortable", "sexual_harassment", "threat"]
 EXTENSIONS = {"audio/aac": "aac", "audio/mp4": "m4a", "audio/ogg": "ogg", "audio/wav": "wav"}  # aac: ADTS, what the phone records
@@ -163,9 +164,10 @@ def save_recording(trip_id: str, body: Recording, background: BackgroundTasks, u
     trip = participant_trip(trip_id, user["uid"])
     if not (trip["consent"]["rider"] and trip["consent"]["driver"]):
         raise HTTPException(409, "No recording: rider and driver did not both consent")
-    # Privacy: a ride only leaves the phone after a high flag, an SOS or a report.
-    if not any(m.kind in SHARE_WHEN for m in body.markers):
-        raise HTTPException(409, "Only rides with a high flag, an SOS or a report send their recording")
+    # Privacy: a ride only leaves the phone after a high flag, an SOS, a report, or a second warning.
+    warnings = sum(m.kind == "warning" for m in body.markers)
+    if not any(m.kind in SHARE_WHEN for m in body.markers) and warnings < WARNINGS_TO_SHARE:
+        raise HTTPException(409, "Only rides with a high flag, an SOS, a report or two warnings send their recording")
     role = role_of(trip, user["uid"])
     before = (trip.get("recordings") or {}).get(role) or {}
     status = "uploaded" if body.done else "live" if body.live else "uploading"

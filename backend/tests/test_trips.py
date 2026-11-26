@@ -96,13 +96,14 @@ def test_live_marks_the_open_case_until_the_ride_ends(client, login, db):
     assert db.document("incidents", created["incidentId"]).get().get("live") is False
 
 
-def test_a_report_shares_the_recording_but_warnings_alone_do_not(client, login, db):
+def test_a_report_or_a_second_warning_shares_the_recording_but_one_warning_does_not(client, login, db):
     login("rider1")
     client.post("/trips", json={"orderId": "GR-1006", "riderConsent": True})
     warnings_only = {"markers": [MARKERS[0]]}
     assert put_recording(client, "GR-1006", **warnings_only).status_code == 409
     assert "recordings" not in db.document("trips", "GR-1006").get().to_dict()
     assert put_recording(client, "GR-1006", markers=[MARKERS[0], {"at": 12.0, "kind": "manual_unsafe"}]).status_code == 200
+    assert put_recording(client, "GR-1006", markers=[MARKERS[0], {**MARKERS[0], "at": 30.0}]).status_code == 200
 
 
 def test_no_recording_without_both_consents(client, login, db):
