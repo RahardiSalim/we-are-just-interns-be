@@ -1,76 +1,98 @@
 # GoSafe design rules
 
-One look for the mobile app and the agent dashboard, based on Gojek's **Asphalt (Aloha)** design system. Both apps use the tokens below; don't invent new colours, sizes or radii in feature code.
+One look for the mobile app and the agent dashboard, based on **The Gojek Brand Book (2019)** and Gojek's **Asphalt (Aloha)** design system. Both apps use the tokens below; don't invent new colours, sizes or radii in feature code.
 
 Each value says where it comes from:
-- **Asphalt**: stated on [asphalt.gojek.io](https://asphalt.gojek.io/pages/foundations.html).
-- **Brand**: Gojek's public brand material.
-- **Ours**: our choice where Asphalt's public pages show values only in images that are no longer online (colour swatches, type sizes, shadows, radius). Replace these with the official values once we have the Figma file or the brand guideline PDF.
+- **Brand book**: The Gojek Brand Book 2019 (page numbers are the book's printed pages).
+- **Asphalt**: [asphalt.gojek.io](https://asphalt.gojek.io/pages/foundations.html).
+- **Ours**: our choice, where neither source gives a value (radii, shadow values, light tints, dark-mode neutrals), or where we nudged a value to pass contrast.
 
-## Principles (Asphalt)
+## Principles
 
-1. **Consistency:** design with the system, never as one-off screens. Reuse the tokens and components here.
-2. **Usability:** users first, business second. In GoSafe that means safety first: the SOS button is always reachable, and nothing may cover it.
+**Asphalt:**
+1. **Consistency:** design with the system, never as one-off screens.
+2. **Usability:** users first, business second. For GoSafe that means safety first: the SOS button is always reachable, and nothing may cover it.
 3. **Accessibility:** text meets WCAG 2.0 AA, 4.5:1 for normal text and 3:1 for large text.
 4. **Aesthetics:** clean and confident, never at the cost of the first three.
 
-Motion follows Asphalt's three ideas: *candid* (human), *contextual* (show, don't tell), *playful*. In a safety product, keep it calm: motion only explains a change, never decorates. Keep it to 150–250 ms ease-out, and turn it off when the device asks for reduced motion.
+**Brand book.** Gojek's archetype is *the Magician*: it makes the complex appear simple. Its slogan is *Pasti Ada Jalan* ("There's always a way"). For GoSafe, that means one clear next step on every screen.
+
+**Motion (Asphalt):** candid, contextual, playful. In a safety product, keep it calm: motion only explains a change, never decorates. Keep it to 150–250 ms ease-out, and turn it off when the device asks for reduced motion.
 
 ## Colour
+
+### How Gojek uses colour (brand book p. 70–96)
+
+Six primary colours, one per product family, and "no random colours":
+
+| Colour | Hex | Product family |
+|---|---|---|
+| **Gojek Green** | `#00AA13` | Travel, transport and logistics: **GoRide, GoCar**, GoSend. GoSafe's home colour |
+| Retail Red | `#EE2737` | Food and shopping (GoFood, GoMart) |
+| Odd-job Orange | `#EF6A00` | Household services |
+| Popcorn Pink | `#DF1995` | Entertainment |
+| Payment Blue | `#00AED6` | Payments |
+| Partner Purple | `#93328E` | Merchant and driver partners |
+
+GoSafe is a transport feature, so it is **green**. We borrow shades of red and orange only for **safety meaning** (below), never as decoration and never as a product colour.
 
 ### Brand
 
 | Token | Hex | Source | Use |
 |---|---|---|---|
-| `green-500` (Gojek green) | `#00AA13` | Brand, Asphalt | Brand moments: logo mark, icons, large or bold text, selected states, progress |
-| `green-600` | `#008A10` | Ours (AA-safe shade) | **Fills with normal-size text on them** (primary buttons, chips): white on it is 4.5:1 |
-| `green-700` | `#00800E` | Ours | Pressed state; green text on white (5.1:1) |
-| `green-50` | `#E6F7E8` | Ours | Light green backgrounds (success banners, "listened" state) |
-| `ink` | `#1C1C1C` | Brand (black), softened | Primary text, icons on light backgrounds |
+| `brand` (Gojek Green) | `#00AA13` | Brand book p. 70 | Brand moments: icons, large or bold text, selected states, focus ring |
+| `brand-strong` | `#008A10` | Ours: brand book's green 2426C `#008C15` (4.41:1) nudged to pass AA | **Fills with normal-size text** (primary buttons): white on it is 4.5:1 |
+| `brand-deep` | `#257226` | Brand book green 2273C | Pressed state; green text on white (6.0:1) |
+| `brand-tint` | `#E6F7E8` | Ours | Light green backgrounds ("you listened", success) |
 
-White text on `#00AA13` is only 3.1:1, so it passes AA for large text only (24px, or 19px bold). That's why buttons use `green-600`.
+White text on `#00AA13` is only 3.1:1, so it passes AA for large text only (24px, or 19px bold). That's why buttons use `brand-strong`.
 
-### Neutrals (ours)
+### Neutrals (brand book p. 96–97, Pantone Black and Cool Grays)
 
-| Token | Light | Dark | Use |
-|---|---|---|---|
-| `bg` | `#FFFFFF` | `#121212` | Page background |
-| `surface` | `#F7F7F7` | `#1C1C1C` | Cards on the page, grouped areas |
-| `line` | `#E5E5E5` | `#2E2E2E` | 1px borders. Asphalt prefers space over dividers, so use these sparingly |
-| `muted` | `#6B6B6B` | `#A3A3A3` | Secondary text (5.3:1 on white) |
-| `text` | `#1C1C1C` | `#F2F2F2` | Primary text |
+| Token | Light | Dark (ours) | Source | Use |
+|---|---|---|---|---|
+| `canvas` | `#FFFFFF` | `#121212` | | Page background |
+| `surface` | `#F7F7F7` | `#1C1C1C` | Ours | Grouped areas, chips |
+| `line` | `#D9D9D6` | `#2E2E2E` | Cool Gray 1 C | 1px borders. Prefer space over dividers (Asphalt) |
+| `muted` | `#63666A` | `#A3A3A3` | Cool Gray 10 C | Secondary text: 5.8:1 on white |
+| `fg` / `ink` | `#101820` | `#F2F2F2` | Black 6 C | Primary text: 17.9:1 on white |
 
-Dark theme: Asphalt supports light and dark, following the device setting. Gojek green on `#121212` is 6.0:1, so it works for text in dark mode too.
+Dark theme: Asphalt supports light and dark, following the device setting. Gojek Green on `#121212` is 6.0:1, so it also works as text in dark mode.
 
-### Safety meaning (ours, same everywhere)
+### Safety meaning (same in both apps)
 
-These colours mean the same thing on the phone and on the dashboard. They are never used for decoration.
+Shades from the brand book's red and orange families, used only to say how serious something is:
 
-| Token | Hex | Text on it | Meaning |
-|---|---|---|---|
-| `warning` | `#F5A300` | `ink` only (8.2:1) | Warning: an uncomfortable remark |
-| `unsafe` | `#E8590C` | `ink` only (4.8:1) | "I feel unsafe" press |
-| `high` | `#D92D20` | white (4.8:1) | High flag: harassment or threat detected |
-| `sos` | `#7A1414` | white (10.8:1) | SOS press, and the SOS button |
-| `danger` | `#D92D20` | white | Destructive actions (suspend driver) |
-| `success` | `green-600` | white | Done, safe, agrees |
+| Token | Hex | Source | Text on it | Meaning |
+|---|---|---|---|---|
+| `warn` | `#FF8F1C` | Orange 1495C | `ink` only (7.8:1) | Warning: an uncomfortable remark |
+| `unsafe` | `#E35205` | Orange 166C | `ink` only (4.7:1) | "I feel unsafe" press |
+| `high` | `#D22730` | Red 1795C | white (5.2:1) | High flag: harassment or threat detected |
+| `sos` | `#862633` | Red 202C | white (9.0:1) | SOS press, and the SOS button |
+| `danger` | `#D22730` | Red 1795C | white | Destructive actions (suspend driver) |
+| `success` | `brand-strong` | | white | Done, safe, agrees |
 
-Each one also has a light tint for backgrounds, at about 10% strength: `warning-50` `#FFF6E0`, `unsafe-50` `#FDEEE6`, `high-50` `#FDECEA`, `sos-50` `#F7E8E8`.
+Light tints for backgrounds: `warn-tint` `#FFF4E5` (ours), `unsafe-tint` `#FDEEE6` (ours), `high-tint` `#F2D4D7` (red 698C), `sos-tint` `#F3E4E6` (ours).
 
 ## Typography
 
-**Typeface.** Asphalt uses **Maison Neue** in Book, Demi and Bold, with no italic. Maison Neue is a paid font, so until we have a licence both apps use **Plus Jakarta Sans** (free, open licence, designed for Jakarta), in Regular (400) for Book, SemiBold (600) for Demi and Bold (700). Swapping the font family in one place switches both apps.
+**Typeface (brand book p. 138–145, Asphalt).** **Maison Neue**: "precise geometric forms" with a "humanist character".
+- **Display**, for titles that stand out: Maison Neue **Extended** (Book, Bold, Extra Bold).
+- **Body**, for everything people read: Maison Neue **Book**. Also Demi and Bold.
+- **Leading:** 1.5× for body text (brand book). Asphalt's app scale rounds line heights to a multiple of 4.
 
-**Scale.** Asphalt: base 12, scale factor 1.3, line height = size × 1.3 rounded to a multiple of 4. The sizes below come from that rule (ours; the official table was an image):
+Maison Neue is a paid font, so until we have a licence both apps use **Plus Jakarta Sans** (free, open licence, designed for Jakarta): Regular (400) for Book, SemiBold (600) for Demi, Bold (700) for Bold and Extended titles. The font family is set in one place per app.
+
+**Scale (Asphalt: base 12, ×1.3, line height rounded to 4).** The official size table is an image no longer online, so the sizes follow the rule:
 
 | Token | Size / line height | Weight | Use |
 |---|---|---|---|
-| `title-hero` | 44 / 56 | Bold | Big numbers on the dashboard (rare) |
+| `title-hero` | 44 / 56 | Bold | Big numbers (rare) |
 | `title-large` | 34 / 44 | Bold | Mobile home headline |
 | `title-medium` | 26 / 36 | Bold | Page titles ("Order GR-DEMO-1") |
 | `title-small` | 20 / 28 | Demi | Card and section titles |
 | `title-tiny` | 16 / 20 | Demi | Labels, list titles, buttons |
-| `body-moderate` | 16 / 24 | Book | Body text, messages |
+| `body-moderate` | 16 / 24 | Book | Body text, messages (1.5×) |
 | `body-small` | 14 / 20 | Book | Secondary text, transcript lines |
 | `caption` | 12 / 16 | Book | Timestamps, hints. Use sparingly (Asphalt) |
 
@@ -78,26 +100,26 @@ Each one also has a light tint for backgrounds, at about 10% strength: `warning-
 
 4px base, 4px grid. Use the same steps inside and between components: `4, 8, 12, 16, 20, 24, 32, 40, 48, 64`.
 
-- Group things with space, not dividers (Asphalt).
+- Group things with space, not dividers.
 - Give the most important element extra space: on the phone, the SOS button.
 - Screen padding: 16 on mobile, 24 on the dashboard.
 
 ## Shape and elevation
 
-**Radius (ours):**
-
-| Token | Value | Use |
-|---|---|---|
-| `radius-s` | 8 | Chips, inputs, small tags |
-| `radius-m` | 12 | Cards |
-| `radius-l` | 16 | Dialogs, bottom sheets |
-| `radius-pill` | 999 | Buttons |
-
-**Elevation.** Asphalt has two shadow levels, and every component is 1px thick:
+The brand book's compositions use **curved containers** with rounded corners, so GoSafe leans round.
 
 | Token | Value (ours) | Use |
 |---|---|---|
-| `shadow-low` | `0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.08)` | Cards, sticky bars |
+| `radius-chip` | 8 | Chips, inputs, small tags |
+| `radius-card` | 12 | Cards |
+| `radius-sheet` | 16 | Dialogs, bottom sheets |
+| pill | 999 | Buttons |
+
+**Elevation (Asphalt).** There are two levels, and every component is 1px thick:
+
+| Token | Value (ours) | Use |
+|---|---|---|
+| `shadow-low` | `0 1px 2px rgb(0 0 0 / 0.06), 0 1px 3px rgb(0 0 0 / 0.08)` | Cards when they float, sticky bars |
 | `shadow-high` | `0 8px 24px rgb(0 0 0 / 0.12)` | Dialogs, menus |
 
 ## Components
@@ -106,31 +128,42 @@ Asphalt's components: Alert, Badge, Bottom Navbar, Button, Card, Coachmark, Divi
 
 | Component | Rule |
 |---|---|
-| **Button** | Pill. Height 48 on mobile, 40 on the dashboard (56 for the mobile Start ride and 64 for SOS). Primary: `green-600` fill, white `title-tiny` text. Secondary: outlined with `line`, `text` colour. Danger: `sos` fill for SOS, `danger` for destructive actions. One primary button per view. |
-| **Alert** | The warning and status messages. Light tint of the meaning colour, ink text, an icon at the start. Shown at the **top**, never over the bottom buttons. |
+| **Button** | Pill. Height 48 on mobile, 40 on the dashboard (56 for the mobile Start ride and 64 for SOS). Primary: `brand-strong` fill, white `title-tiny` text. Secondary: outlined with `line`, `fg` text. SOS: `sos` fill. Destructive: `danger`. One primary button per view. |
+| **Alert** | Warnings and status messages. Light tint of the meaning colour, `fg` text, an icon at the start. Shown at the **top**, never over the bottom buttons. |
 | **Toast** | Not used: a toast at the bottom would cover SOS. Use an Alert at the top instead. |
-| **Card** | `surface` or `bg` with `line` border, `radius-m`, `shadow-low` only when it floats. 16 padding (mobile), 20 to 24 (dashboard). |
-| **Badge** | Priority, trigger and flag kind. `radius-s`, `caption` or `body-small` Demi, a meaning colour with its tint or solid. |
-| **Selection control** | Radios for the agent's decision, as full-width cards. Checkboxes in `green-600`. |
-| **Input field** | `radius-s`, 1px `line` border, focus ring in `green-500`. |
+| **Card** | `canvas` with a 1px `line` border, `radius-card`; `shadow-low` only when it floats. Padding 16 (mobile), 20 (dashboard). |
+| **Badge** | Priority, trigger and flag kind. `radius-chip`, Demi weight, a meaning colour with its tint or solid. |
+| **Selection control** | Radios for the agent's decision, as full-width cards that turn `brand-tint` when picked. |
+| **Input field** | `radius-chip`, 1px `line` border, `brand` focus ring. |
 | **Marker** | Flag pins on the ride timeline, in the meaning colours. |
 
-## Writing
+## Logo
 
-- **Short, caring, never alarming** (all the wording lives in the mobile app's `SafetyText`). Say what happened and what we're doing: "We're on it. Our safety team will contact you right away."
-- No blame in messages both people can see. The warning is about the conversation, not a person.
-- Sentence case everywhere ("Start ride", not "Start Ride").
-- Times on the dashboard are in WIB.
+GoSafe uses its own shield mark in Gojek Green, not the Gojek logo. If the Gojek logo (*Solv*) is ever shown (brand book p. 36–67): single colour on solid backgrounds, at least 35px in digital, never stretched, outlined, rotated, shadowed or given a gradient, and no random colours.
+
+## Writing (brand book p. 208–213)
+
+Gojek's voice has four traits: **Clear, Casual, Witty, Empathetic**, tuned to who we're talking to and when ("we don't crack jokes with a food partner whose payment is pending").
+
+GoSafe is about safety, so:
+- **Clear and empathetic first. Never witty**: no puns or jokes in safety moments.
+- **Casual but respectful** with riders: "Hey, this conversation seems to be getting uncomfortable. Let's keep it kind."
+- **With drivers, clear over casual** (the brand book's rule for partners): short and sweet, actionable, polite yet personal. Titles must make sense on their own, even if the description is skipped.
+- Say what happened and what we're doing: "We're on it. Our safety team will contact you right away."
+- No blame in messages both people see. The warning is about the conversation, not a person.
+- Sentence case everywhere ("Start ride"). Dashboard times are in WIB.
+
+All rider-facing wording lives in the mobile app's `SafetyText`.
 
 ## Where the tokens live
 
 | App | File |
 |---|---|
-| Dashboard | `dashboard/src/app/globals.css`: Tailwind `@theme` variables (`--color-*`, `--radius-*`, `--shadow-*`, `--font-sans`) |
-| Mobile | `mobile/lib/theme.dart`: `GoSafeColors`, `GoSafeType`, `ThemeData` for light and dark |
+| Dashboard | `dashboard/src/app/globals.css`: Tailwind `@theme` (`--color-*`, `--radius-*`, `--shadow-*`, `--text-*`, `--font-sans`) |
+| Mobile | `mobile/lib/theme.dart`: `GoSafeColors`, `GoSafeType`, `goSafeTheme()` for light and dark |
 
-## Sources and gaps
+## Sources
 
-Read: Asphalt [foundations](https://asphalt.gojek.io/pages/foundations.html), [colours](https://asphalt.gojek.io/pages/foundations_colors.html), [typography](https://asphalt.gojek.io/pages/foundations_typography.html), [spacing](https://asphalt.gojek.io/pages/foundations_spacings.html), [shadows](https://asphalt.gojek.io/pages/foundations_shadows.html), [motion](https://asphalt.gojek.io/pages/foundations_motion.html), [principles](https://asphalt.gojek.io/pages/principles.html), [components](https://asphalt.gojek.io/pages/components.html); [Gojek's rebrand story](https://www.gojek.io/blog/gojeks-rebrand-story-the-new-logo) (Maison Neue); third-party palettes for `#00AA13` ([brandpalettes](https://brandpalettes.com/gojek-logo-colors/)).
-
-Not readable yet: the brand guideline PDF (too large to fetch), the Behance case study (blocks automated access), Figma and Dribbble (need a person to look), and Asphalt's swatch, type-scale and shadow images (missing from the site). Values marked "Ours" should be checked against those.
+- **The Gojek Brand Book 2019**, Gojek Design: brand story, logo, colours (primary, secondary, neutrals), typography, iconography, illustration, tone of voice, composition. It was downloaded from `lelogama.go-jek.com/gojeks_brand_guideline.pdf` to read; it is not stored in this repo.
+- **Asphalt (Aloha):** [foundations](https://asphalt.gojek.io/pages/foundations.html), [colours](https://asphalt.gojek.io/pages/foundations_colors.html), [typography](https://asphalt.gojek.io/pages/foundations_typography.html), [spacing](https://asphalt.gojek.io/pages/foundations_spacings.html), [shadows](https://asphalt.gojek.io/pages/foundations_shadows.html), [motion](https://asphalt.gojek.io/pages/foundations_motion.html), [principles](https://asphalt.gojek.io/pages/principles.html), [components](https://asphalt.gojek.io/pages/components.html).
+- **Not read:** the Behance case study (blocks automated access), Figma and Dribbble (need a person), and Asphalt's swatch, type-scale and shadow images (missing from the site). Radii and shadow values are ours until someone checks them against the Figma file.

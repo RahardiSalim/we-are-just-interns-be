@@ -4,14 +4,14 @@
 :root {
   --canvas: #ffffff;
   --surface: #f7f7f7;
-  --line: #e5e5e5;
-  --fg: #1c1c1c;
-  --muted: #6b6b6b;
+  --line: #d9d9d6; /* Cool Gray 1 C */
+  --fg: #101820; /* Black 6 C */
+  --muted: #63666a; /* Cool Gray 10 C */
   --brand-tint: #e6f7e8;
-  --warn-tint: #fff6e0;
+  --warn-tint: #fff4e5;
   --unsafe-tint: #fdeee6;
-  --high-tint: #fdecea;
-  --sos-tint: #f7e8e8;
+  --high-tint: #f2d4d7; /* red 698C */
+  --sos-tint: #f3e4e6;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -39,20 +39,20 @@
   --color-muted: var(--muted);
 
   --color-brand: #00aa13; /* Gojek green: brand moments, large text, focus */
-  --color-brand-strong: #008a10; /* fills with normal-size text (AA 4.5:1) */
-  --color-brand-deep: #00800e; /* pressed, green text on white */
+  --color-brand-strong: #008a10; /* green 2426C #008C15 nudged to pass AA 4.5:1 */
+  --color-brand-deep: #257226; /* green 2273C: pressed, green text on white */
   --color-brand-tint: var(--brand-tint);
 
-  --color-warn: #f5a300; /* ink text only */
+  --color-warn: #ff8f1c; /* orange 1495C, ink text only */
   --color-warn-tint: var(--warn-tint);
-  --color-unsafe: #e8590c; /* ink text only */
+  --color-unsafe: #e35205; /* orange 166C, ink text only */
   --color-unsafe-tint: var(--unsafe-tint);
-  --color-high: #d92d20;
+  --color-high: #d22730; /* red 1795C */
   --color-high-tint: var(--high-tint);
-  --color-sos: #7a1414;
+  --color-sos: #862633; /* red 202C */
   --color-sos-tint: var(--sos-tint);
-  --color-danger: #d92d20;
-  --color-ink: #1c1c1c; /* text on warn / unsafe fills, in both themes */
+  --color-danger: #d22730;
+  --color-ink: #101820; /* text on warn / unsafe fills, in both themes */
 
   --radius-chip: 8px;
   --radius-card: 12px;

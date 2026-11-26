@@ -9,7 +9,7 @@ abstract final class GoSafeColors {
   static const brandStrong = Color(
     0xFF008A10,
   ); // fills with normal-size text (AA 4.5:1)
-  static const brandDeep = Color(0xFF00800E); // pressed, green text on white
+  static const brandDeep = Color(0xFF257226); // pressed, green text on white
   static const brandTint = Color(0xFFE6F7E8);
 
   // Neutrals (light / dark)
@@ -17,20 +17,20 @@ abstract final class GoSafeColors {
   static const canvasDark = Color(0xFF121212);
   static const surface = Color(0xFFF7F7F7);
   static const surfaceDark = Color(0xFF1C1C1C);
-  static const line = Color(0xFFE5E5E5);
+  static const line = Color(0xFFD9D9D6);
   static const lineDark = Color(0xFF2E2E2E);
-  static const ink = Color(0xFF1C1C1C);
+  static const ink = Color(0xFF101820);
   static const fgDark = Color(0xFFF2F2F2);
-  static const muted = Color(0xFF6B6B6B);
+  static const muted = Color(0xFF63666A);
   static const mutedDark = Color(0xFFA3A3A3);
 
   // Safety meaning: same as the dashboard, never decorative.
-  static const warn = Color(0xFFF5A300); // ink text only
-  static const warnTint = Color(0xFFFFF6E0);
-  static const unsafe = Color(0xFFE8590C); // ink text only
-  static const high = Color(0xFFD92D20);
-  static const highTint = Color(0xFFFDECEA);
-  static const sos = Color(0xFF7A1414);
+  static const warn = Color(0xFFFF8F1C); // ink text only
+  static const warnTint = Color(0xFFFFF4E5);
+  static const unsafe = Color(0xFFE35205); // ink text only
+  static const high = Color(0xFFD22730);
+  static const highTint = Color(0xFFF2D4D7);
+  static const sos = Color(0xFF862633);
 }
 
 /// Asphalt type scale: base 12, x1.3, line height rounded to 4.
