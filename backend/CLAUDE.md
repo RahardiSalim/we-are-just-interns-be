@@ -1,14 +1,14 @@
 # backend
 
-FastAPI service on Cloud Run. Owns every write to Firestore and Storage, signs upload/read URLs, runs STT → IndoBERT → severity → check-in/escalation, and sends FCM pushes.
+FastAPI service on Cloud Run. Owns every write to Firestore and Storage, signs upload/read URLs, takes the phone's transcript and label → severity → check-in/escalation, and sends FCM pushes. Speech-to-text and the classifier run on the phones, not here.
 
 Follow the root [CLAUDE.md](../CLAUDE.md) rules and [contracts/ARCHITECTURE.md](../contracts/ARCHITECTURE.md).
 
-- Stack: Python 3.12, FastAPI, firebase-admin, google-cloud-speech (Chirp 3), ONNX Runtime for IndoBERT (no full PyTorch in the image).
-- Layout: `app/api/` routes, `app/services/` Firestore/Storage/FCM/STT/LLM, `app/ml/` classifier, `app/models/` Pydantic, `app/core/` config + auth; `scripts/seed.py`, `scripts/export_openapi.py`; `tests/`.
+- Stack: Python 3.12, FastAPI, firebase-admin. No ML libraries: the models are edge AI on the phones.
+- Layout: `app/api/` routes, `app/services/` Firestore/Storage/FCM/LLM, `app/core/` config + auth; `scripts/seed.py`, `scripts/export_openapi.py`; `tests/`.
 - Auth: verify the Firebase ID token on every route except `/health`; check the `role` claim.
 - Config: env vars only (see ARCHITECTURE.md). `/dev/*` routes only when `ENABLE_DEV_ROUTES=true`.
-- ML pieces (classifier, STT, LLM) are on hold; see "On hold" in ARCHITECTURE.md. Stand-ins: `services/classify.py` (keyword filter), `pipeline.transcribe` (returns nothing), `pipeline.summarize` (template). Don't add `app/ml/` until a model exists.
+- Models: speech-to-text and IndoBERT run on the phones. Server-side stand-ins: `services/classify.py` (keyword filter, only when the phone sent no label), `pipeline.transcribe` (returns nothing; the hook for future cloud STT), `pipeline.summarize` (template until Sahabat-AI).
 - Status changes live in `services/pipeline.py` and the API handlers, inside Firestore transactions where two callers can race (finalize, check-in reply vs timeout, open, decision).
 - Tests sit at the HTTP API against the emulator; only token checks, push, and URL signing are faked (`tests/conftest.py`).
 

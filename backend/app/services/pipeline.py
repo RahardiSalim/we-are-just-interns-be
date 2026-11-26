@@ -24,7 +24,7 @@ TRIGGER_TEXT = {"sos": "SOS", "manual_unsafe": '"Saya merasa tidak aman"'}
 
 
 def transcribe(clip_path: str | None) -> list[dict]:
-    # shortcut: Chirp 3 STT is on hold until the GCP project exists; only device transcripts are used.
+    # Speech-to-text is edge AI on the phones. Cloud STT (Chirp 3) is future work, so nothing to add here yet.
     return []
 
 

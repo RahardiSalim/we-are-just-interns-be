@@ -7,7 +7,7 @@ Single source of truth for building the three apps. Where the earlier "System de
 | Part | Pick | Notes |
 |---|---|---|
 | Android app | Flutter (Android only) | Listens for the whole trip on both phones (see "On-device listening"). Foreground service with the `microphone` type; `sherpa_onnx` for voice detection + Whisper; ONNX Runtime for IndoBERT. |
-| Backend | FastAPI on Cloud Run | Same Google project as Firebase, so Firestore, Storage, FCM and Speech-to-Text work with no extra keys. IndoBERT via ONNX Runtime, not full PyTorch. |
+| Backend | FastAPI on Cloud Run | Same Google project as Firebase, so Firestore, Storage and FCM work with no extra keys. No speech or classifier models on the server: those run on the phones. |
 | Database | Firestore | Not relational, no geo queries: route maths in Python. |
 | Files | Cloud Storage for Firebase | Requires the **Blaze** plan (fails with 402/403 on Spark). Add a budget alert. |
 | Dashboard | Next.js on Vercel (Hobby) | No ML and no secrets in Next.js. Reads Firestore, calls FastAPI. |
@@ -57,7 +57,7 @@ Agreed 2026-11-26. The phone listens and judges; the backend only hears about it
 1. **Clients read Firestore, write through the API.** Firestore rules deny all client writes.
 2. **Only the backend holds admin credentials.** Cloud Run service account. No service-account JSON in any app, ever.
 3. **One contract.** `contracts/openapi.json` is the API truth, `contracts/firestore-schema.md` the data truth. When either changes, regenerate TypeScript types (dashboard) and Dart models (mobile) in the same pull request.
-4. **The phone judges first.** `POST /incidents` carries the on-device transcript, label and score. The backend uses them as given, and only runs cloud STT when a report arrives without a transcript.
+4. **The phone judges first.** `POST /incidents` carries the on-device transcript, label and score. The backend uses them as given. Speech-to-text and the classifier are edge AI and run only on the phones; cloud processing is future work (see "Future work").
 5. **Status lives in one field.** Each incident has one `status`, changed only by the backend, following the lifecycle below.
 6. **Timestamps are UTC** (Firestore server time); the UI converts to WIB.
 
@@ -103,14 +103,14 @@ Only the backend changes `status`.
 | Status | Set when | Next |
 |---|---|---|
 | `awaiting_upload` | `POST /incidents` | `processing` on finalize (no 10-min `failed` sweep yet) |
-| `processing` | Finalize | STT → classifier → severity → `dismissed`, `checkin_pending` or `escalated` |
+| `processing` | Finalize | device transcript + label (keyword filter if the phone sent no label) → severity → `dismissed`, `checkin_pending` or `escalated` |
 | `dismissed` | Severity low | Logged, deleted at `deleteAt` |
 | `checkin_pending` | Severity medium; FCM push + `checkins` doc to rider and driver | `resolved_ok` if both reply ok; `escalated` on `need_help` or no reply in 90 s |
 | `escalated` | Severity high, failed check-in, or `trigger: auto` (planned; the check-in to both runs alongside); timeline + LLM summary built | `under_review` when an agent opens it |
 | `under_review` | Agent calls `POST /incidents/{id}/open` | `closed` after a decision |
 | `closed` | Decision recorded | Driver may appeal (stretch) |
 
-Processing: download clip → Chirp 3 STT (`id-ID`, 16 kHz mono WAV/FLAC) unless a device transcript was sent → IndoBERT on 30 s windows → combine with trip events for severity → for escalations, Sahabat-AI (or a hosted LLM) writes the summary from the masked transcript and timeline.
+Processing: take the phone's transcript, label and score → if the phone sent no label, the keyword filter labels the transcript → severity → for escalations, a summary from the masked transcript (template now, Sahabat-AI later). A report with no transcript at all (the models weren't ready on the phone) is judged by its trigger alone.
 
 Classifier labels: `normal`, `uncomfortable`, `sexual_harassment`, `threat`.
 
@@ -125,7 +125,7 @@ Classifier labels: `normal`, `uncomfortable`, `sexual_harassment`, `threat`.
 
 | App | Config |
 |---|---|
-| backend | `GCP_PROJECT`, `FIREBASE_STORAGE_BUCKET`, `SPEECH_REGION`, `LLM_BASE_URL`, `LLM_API_KEY`, `ENABLE_DEV_ROUTES`, `CHECKIN_TIMEOUT_SEC` (90) |
+| backend | `GCP_PROJECT`, `FIREBASE_STORAGE_BUCKET`, `LLM_BASE_URL`, `LLM_API_KEY`, `ENABLE_DEV_ROUTES`, `CHECKIN_TIMEOUT_SEC` (90) |
 | dashboard | `NEXT_PUBLIC_FIREBASE_*`, `NEXT_PUBLIC_API_URL` |
 | mobile | `google-services.json`, `API_URL` via `--dart-define`, `DEMO_MODE` |
 
@@ -147,7 +147,7 @@ One shared Firebase + GCP project, emulators locally, a `DEMO_MODE` flag instead
 | Phase | Done when |
 |---|---|
 | 1. Walking skeleton | App logs in, calls `/health`, dashboard shows a seeded incident live |
-| 2. Core flow | One full incident (SOS → upload → STT → classifier → check-in → escalate → ticket) works on the deployed stack |
+| 2. Core flow | One full incident (SOS → on-phone transcript and label → upload → check-in → escalate → ticket) works on the deployed stack |
 | 3. Polish | Timeline map, LLM summary, Safe Ride badge, metrics. Demo script runs twice with no fixes |
 | 4. Freeze | Last deploy hours before judging; tag the commit; backup video recorded |
 
@@ -160,7 +160,6 @@ Waiting on something outside the code. Build around these with stubs or seed dat
 | Item | Waiting on | Until then |
 |---|---|---|
 | IndoBERT classifier (ONNX int8) | Modelling team: dataset + fine-tune + export | Seeded incidents carry a fixed `label` and `score` |
-| Chirp 3 STT | Firebase/GCP project on Blaze, Speech API enabled | Seeded transcript |
 | Sahabat-AI summary | A hosted endpoint (`LLM_BASE_URL`, `LLM_API_KEY`) | Seeded summary |
 | On-device Whisper + IndoBERT | Modelling team: ONNX exports, the warning/high thresholds, a speed and battery benchmark on a mid-range phone | The app sends a canned transcript and label so the backend flow can be tested |
 | Sample audio + real GPS trace | Team recordings | `contracts/fixtures/demo-trip.json` (hand-made route), `clipPath: null` |
@@ -168,6 +167,10 @@ Waiting on something outside the code. Build around these with stubs or seed dat
 | Backend deploy | GitHub repo variables `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA` (Workload Identity Federation) | Run locally |
 | Mobile listening service | Android SDK + a real phone (the microphone service can't run in the web preview) | Mock trip screen in `mobile/` |
 | Warning message wording | Team / pitch owner | Placeholder text |
+
+## Future work
+
+- **Cloud speech-to-text and classification.** Send audio to an API (Chirp 3 `id-ID`, or a hosted IndoBERT) as a second opinion, or for phones too weak to run the models. Needs the GCP project and a way to configure it per phone, neither of which exists yet. `pipeline.transcribe` is the hook; it returns nothing today.
 
 ## Decisions (where the two source docs disagreed)
 
