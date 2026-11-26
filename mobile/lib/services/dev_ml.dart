@@ -39,9 +39,8 @@ const devLabelMap = {
 
 /// The team model together with the keyword filter, line by line:
 /// - The keywords decide on their own, as before: they're precise.
-/// - The model alone can only add a **warning**, and only at [modelAloneAt] or more. It's not validated
-///   (stt/models/classifier/README.md: 11% of friendly small talk gets a harmful label at 0.8), so it
-///   never sends a high flag by itself.
+/// - The model alone adds a **warning** at [modelAloneAt] or more. It raises **threat or sexual** on its own
+///   only when 2+ lines in the window agree (persistence), so one misread line can't escalate.
 /// - Where both say the same harmful label, the higher score counts, which can make it high.
 /// A window takes the most severe line, scored by that label's best line.
 class DevClassifier implements Classifier {
@@ -65,21 +64,45 @@ class DevClassifier implements Classifier {
     raw[line] = (r['label'] as String, (r['score'] as num).toDouble());
   }
 
-  (Label, double) _line(String line) {
+  /// The line's label and score, plus what the model saw when it decided alone (for the persistence rule).
+  (Label, double, Label?) _line(String line) {
     final k = _keywords.classify([line]);
     final r = raw[line];
     final m = r == null ? Label.normal : devLabelMap[r.$1] ?? Label.normal;
     final p = r?.$2 ?? 0;
     if (k.label != Label.normal) {
-      return (k.label, m == k.label && p > k.score ? p : k.score);
+      return (k.label, m == k.label && p > k.score ? p : k.score, null);
     }
-    if (m != Label.normal && p >= modelAloneAt) return (Label.uncomfortable, p);
-    return (Label.normal, 0.5);
+    // Victim speech alone ("halo bagaimana situasi saat ini" read as victim 0.99) is no offence: it only adds
+    // weight when a keyword already flagged the window, so the model alone never warns on it.
+    if (m != Label.normal && r!.$1 != 'victim' && p >= modelAloneAt) {
+      return (Label.uncomfortable, p, m);
+    }
+    return (Label.normal, 0.5, null);
   }
 
   @override
   Verdict classify(List<String> lines) {
-    final each = [for (final l in lines) _line(l)];
+    final each = [
+      for (final l in lines)
+        switch (_line(l)) {
+          (final label, final p, _) => (label, p),
+        },
+    ];
+    // Persistence: the model alone raises threat or sexual when 2+ lines in the window agree (each at
+    // modelAloneAt or more). One confident line only warns, so a single misread line can't escalate.
+    final alone = [for (final l in lines) _line(l).$3];
+    for (final severe in [Label.threat, Label.sexualHarassment]) {
+      final idx = [
+        for (var i = 0; i < lines.length; i++)
+          if (alone[i] == severe) i,
+      ];
+      if (idx.length >= 2) {
+        for (final i in idx) {
+          each[i] = (severe, each[i].$2);
+        }
+      }
+    }
     final worst = each
         .map((e) => e.$1)
         .reduce((a, b) => a.index >= b.index ? a : b);
@@ -117,10 +140,15 @@ Stream<String> devListener(
   );
   final buffer = BytesBuilder();
   var offset = 0.0; // where the buffer starts, in seconds since recording began
+  var carried =
+      0.0; // seconds of a held-back sentence at the start of the buffer
   try {
     await for (final chunk in stream) {
       buffer.add(chunk);
-      if (buffer.length < chunkSecs * bytesPerSec) continue;
+      // A held-back sentence goes again after 3 more seconds, not a full piece: the last thing said (often the
+      // safe phrase) must not wait 15 s or be lost when the ride ends.
+      final due = carried > 0 ? carried + 3 : chunkSecs;
+      if (buffer.length < due * bytesPerSec) continue;
       final pcm = buffer.takeBytes();
       final start = offset;
       final secs = pcm.length / bytesPerSec;
@@ -146,6 +174,7 @@ Stream<String> devListener(
       }
       final cut = (keepFrom * sampleRate).floor() * 2; // whole 16-bit samples
       buffer.add(pcm.sublist(cut));
+      carried = (pcm.length - cut) / bytesPerSec;
       offset = start + cut / bytesPerSec;
     }
   } finally {

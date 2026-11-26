@@ -143,4 +143,20 @@ void main() {
       );
     },
   );
+
+  test('threat words with Indonesian prefixes and in English', () {
+    final c = KeywordClassifier();
+    for (final line in [
+      'saya akan membunuh kamu',
+      'nanti kamu dibunuh',
+      'gue pukul lu',
+      'saya memukul kamu',
+      'gue hajar lu',
+      'saya mutilasi kamu',
+      'kalau enggak i will kill you',
+      'gue habisin lu',
+    ]) {
+      expect(c.classify([line]).label, Label.threat, reason: line);
+    }
+  });
 }

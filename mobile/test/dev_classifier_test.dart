@@ -6,6 +6,26 @@ DevClassifier withModel(Map<String, (String, double)> answers) =>
     DevClassifier(Uri.parse('http://x'))..raw.addAll(answers);
 
 void main() {
+  test(
+    'two confident threat lines in the window raise threat on the model alone',
+    () {
+      final c = withModel({
+        'kamu jangan macam-macam gitu ya': ('threat', 0.97),
+        'saya mutilasi kamu': ('threat', 0.99),
+      });
+      expect(
+        c.classify(['kamu jangan macam-macam gitu ya']).label,
+        Label.uncomfortable,
+        reason: 'one line only warns',
+      );
+      final v = c.classify([
+        'kamu jangan macam-macam gitu ya',
+        'saya mutilasi kamu',
+      ]);
+      expect((v.label, v.score), (Label.threat, 0.99));
+    },
+  );
+
   test('the model alone can only warn, and only when very sure', () {
     final c = withModel({
       'Kamu cantik.': ('APPEARANCE_SEXUAL', 0.95),
@@ -40,7 +60,7 @@ void main() {
   });
 
   test(
-    'the 5-label model maps onto the app labels; victim speech only warns',
+    'the 5-label model maps onto the app labels; victim speech alone never warns',
     () {
       final c = withModel({
         'Lu jangan macem-macem.': ('threat', 0.97),
@@ -53,7 +73,8 @@ void main() {
       );
       expect(
         c.classify(['Pak, itu bukan urusan bapak.']).label,
-        Label.uncomfortable,
+        Label.normal,
+        reason: 'a refusal is no offence: the model misreads plain questions as victim',
       );
     },
   );
