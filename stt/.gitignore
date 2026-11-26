@@ -28,3 +28,5 @@
 
 # Exception: the 5-label IndoBERT-lite classifier (46.8 MB) is committed so the team can pull and use it
 !/models/clf-lite-5x/
+!/models/classifier-distilbert-11/
+/models/classifier-distilbert-11/model.safetensors
