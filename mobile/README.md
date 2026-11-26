@@ -12,7 +12,7 @@ This guide describes the app as it is built today. The product decisions behind 
 | Microphone recording for the whole ride | Built (`record` package, AAC on Android, WAV in the browser preview) |
 | Decision engine (15 s window, classifier, rules) | Built and tested |
 | Warning, high flag sent at once, "Are you okay?", SOS, Report driver / passenger | Built and tested |
-| Rider and driver on the same app (switch on the home screen, demo only) | Built and tested (driver mode not yet run on a device) |
+| Rider and driver on the same app (`--dart-define=ROLE=driver`, demo only), each with its own wording | Built and tested on the emulator and in the browser preview; two real phones not yet run together |
 | Share levels: local, at end, live (see "What leaves the phone, and when") | Built and tested; Live tested on the Android emulator |
 | Every ride kept on the phone for 7 days, encrypted, in 30-second pieces (10-second when Live) | Built and tested |
 | SOS with no signal: offers 112, retries until sent | Built and tested |
@@ -47,9 +47,37 @@ flowchart TD
 ```
 
 - **No login.** Each install signs in anonymously in the background, so the backend still knows whose ride and report it is. In the real product the GoJek app's own login replaces this.
-- **Rider or driver.** A switch on the home screen picks whose phone this is (demo only; in production these are two apps). The rider is asked for consent; the driver isn't, because their **Safe Ride** switch is their consent. The driver's phone joins the rider's ride (`POST /trips` with `role: driver`), so the rider must start first.
+- **Rider or driver.** The app opens straight on the ride; `--dart-define=ROLE=driver` makes it the driver's phone (demo only; in production these are two apps). See "The driver's phone, step by step" below. The rider is asked for consent; the driver isn't, because their **Safe Ride** switch is their consent. The driver's phone joins the rider's ride (`POST /trips` with `role: driver`), so the rider must start first.
 - **The driver decided earlier.** Drivers turn recording on or off in their own settings. Turning it on gives them the **Safe Ride badge**, which the consumer sees during the ride ("Your driver has Safe Ride on"). If the driver left it off, nothing is recorded.
 - **No location.** The app never asks for location permission. A ride is identified by the GoJek order ID; for the demo the backend generates one.
+
+### The driver's phone, step by step
+
+The driver's phone runs the same app with `ROLE=driver`. It records, listens and responds exactly like the rider's; only the wording and the other person on screen differ. The two phones are paired by the ride, not by each other.
+
+```mermaid
+flowchart TD
+    R[Rider's phone: Yes, record] --> T[(Trip, waiting for a driver)]
+    A[Driver's phone opens] --> S[Sends Safe Ride: POST /me/consent]
+    S --> J{A ride waiting?}
+    T -.-> J
+    J -- No --> N["'No ride is waiting for you yet. Ask the rider to start their ride first.' Tap Start ride again"]
+    J -- Yes --> K[Joins it: POST /trips role driver]
+    K --> C{Rider said yes and Safe Ride on?}
+    C -- No --> D[Ride without recording. SOS still works]
+    C -- Yes --> L[Records and listens, its own recording]
+    L --> E[Same responses as the rider: warning, Are you okay?, SOS, Live, safe phrase, vibration]
+    E --> F[End ride: its own share level decides what it uploads]
+    D --> F
+```
+
+1. **The rider starts first.** "Yes, record" creates the trip. Then the driver opens the app: there is no consent prompt, because the driver's **Safe Ride** setting is their consent (on by default; the switch is on the home screen, which the demo app skips).
+2. **Joining.** The driver's phone joins the newest active ride still waiting for a driver (the demo stands in for GoJek's dispatch; in production the driver app passes the order ID). If none is waiting, it says so, and the driver taps **Start ride** again once the rider has started.
+3. **What the driver sees.** The order ID, "Pick up your passenger in", the passenger (name, a stand-in photo, whether they agreed to recording), "Your earnings (GoPay)", SOS, **Report passenger** and End ride. No drop-off Edit.
+4. **During the ride.** Both phones hear the same conversation and judge it on their own. A warning on the driver's phone also asks them to keep it professional, so a driver who is out of line is nudged and a driver who is being harassed is offered help. High flags, "Are you okay?", Live, the safe phrase and SOS work as on the rider's phone.
+5. **One case.** Whatever either phone sends joins the ride's one case. Each phone uploads its own recording, and the agent can play either.
+
+**Demo with two phones (Android).** Both reach the same backend: the laptop on the same Wi-Fi (`scripts/demo.sh`) or the deployed one. Install the app on the rider's phone as is, and on the driver's phone with `--dart-define=ROLE=driver`. Start the ride on the rider's phone first, then open the driver's. In the browser preview, `?role=driver` shows the driver's side, but the two tabs aren't connected.
 
 ## What leaves the phone, and when
 
@@ -120,7 +148,7 @@ On a motorbike, tapping SOS is the hard part. The rider or the driver can say a 
 
 - **No model needed.** It matches the speech-to-text output (`lib/engine/safe_phrase.dart`): words are lower-cased and stripped of punctuation, then compared word by word, allowing one slip per six words (a word missed, or a word one letter off, like "aja" → "saja" or "ya" → "yah"). The phrase can sit inside a longer sentence.
 - **Once per ride.** Saying it again doesn't send a second flag.
-- **Setting it:** each person sets their own, rider and driver alike: **Safe phrase → Set / Change** on the home screen. It's kept on the phone, encrypted like the rides (`safe_phrase.enc`), never sent anywhere. 4 to 12 words; shorter phrases are refused because they'd fire by accident. Until one is set, the default is `--dart-define=SAFE_PHRASE=...` ("Pak, nanti lewat jalan biasa aja ya").
+- **Setting it:** each person sets their own, rider and driver alike: **Safe phrase → Set / Change** on the ride sheet. It's kept on the phone, encrypted like the rides (`safe_phrase.enc`), never sent anywhere. 4 to 12 words; shorter phrases are refused because they'd fire by accident. Until one is set, the default is `--dart-define=SAFE_PHRASE=...` ("Pak, nanti lewat jalan biasa aja ya").
 - **Demo:** `flutter run --dart-define=DEMO_SCRIPT=safe_phrase` plays a short ride where the rider says the phrase.
 - **Limits:** it only works as well as speech-to-text hears the rider on a moving motorbike, which needs testing with the real model. Pick a phrase that's rare in normal rides, so it never fires by accident.
 
@@ -215,7 +243,7 @@ What that means with the keyword filter:
 | Run | How |
 |---|---|
 | On a phone, with the backend and dashboard | `flutter run --dart-define=API_URL=... --dart-define=DEMO_SCRIPT=high2` |
-| In the browser preview (no backend) | `flutter run -d chrome -t lib/preview.dart`, then add `?scenario=high2` to the address |
+| In the browser preview (no backend) | `flutter run -d chrome -t lib/preview.dart`, then add `?scenario=high2` to the address; `&role=driver` shows the driver's phone, so the two sides can sit in two tabs |
 | Automated | `flutter test` (group "scenarios" in `test/trip_screen_test.dart`) |
 
 ### The demo conversation, step by step
@@ -236,11 +264,14 @@ At "End ride", this ride had a high flag, so the full recording uploads with two
 
 Every message is short and caring, never alarming. All the wording lives in one place, `SafetyText` in `lib/features/safety/are_you_ok.dart`.
 
+**Two sides, same features.** The rider's and the driver's phone do the same thing; only the words and the other person differ. The rider sees the driver (plate, name, photo, "Your driver has Safe Ride on", Report driver, Edit drop-off). The driver sees the passenger (order ID, "Pick up your passenger in", name, a stand-in photo 🐱, whether the passenger agreed to recording, "Your earnings", Report passenger), and a warning that also asks them to keep it professional.
+
 | Moment | Message | Buttons |
 |---|---|---|
 | Start ride | **Keep this ride safe?** "We'd like to record audio during this ride. It's only reviewed if something seems wrong, and it's deleted after 7 days." | Not now / Yes, record |
 | Warning | "Hey, this conversation seems to be getting uncomfortable. Let's keep it kind. If you feel unsafe, we're right here." | I'm fine / Report |
 | Second warning | "This is the second time the conversation has turned uncomfortable. We'll share this ride's recording with our safety team when it ends. If you feel unsafe, report it now." | I'm fine / Report |
+| Warning, on the driver's phone | "This conversation seems to be getting uncomfortable. Please keep it polite and professional with your passenger. If you feel unsafe, we're right here." (2nd: also "Please keep it professional. If your passenger makes you feel unsafe, report it now.") | I'm fine / Report |
 | Second high flag | **Are you still okay?** "It happened again, so our safety team is now following this ride live. Tap if you need help." | I'm okay / I need help |
 | High flag | **Are you okay?** "Something didn't sound right, so we've let our safety team know. Tap if you need help." | I'm okay / I need help |
 | "I need help" or SOS | "We're on it. Our safety team will contact you right away." | |
@@ -410,7 +441,7 @@ Start the emulators, seed data and backend as described in the root [CLAUDE.md](
 |---|---|---|
 | Chrome | `flutter run -d chrome` | Works; Chrome asks for permission |
 | Android emulator | `flutter run` (reaches this Mac at `10.0.2.2`) | Uses the Mac's microphone. If the emulator freezes when recording starts (macOS mic prompt), start it with `-no-audio`: it records silence |
-| Real phone, same Wi-Fi | Run `scripts/demo.sh` from the repo root, then the `flutter run` line it prints | Works |
+| Real phone, same Wi-Fi | Run `scripts/demo.sh` from the repo root, then the `flutter run` line it prints (add `--dart-define=ROLE=driver` on the driver's phone) | Works |
 
 Claude Code's browser pane blocks microphones, so there the app takes the "not recording" path.
 

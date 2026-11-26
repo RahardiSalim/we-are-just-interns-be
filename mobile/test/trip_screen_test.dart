@@ -559,6 +559,48 @@ void main() {
     },
   );
 
+  testWidgets(
+    'two sides, same features: the driver sees the passenger and their own wording',
+    (tester) async {
+      final h = Harness();
+      await h.pump(tester);
+      await tapIn(tester, find.text('Driver'));
+      await tester.pumpAndSettle();
+      await tapIn(tester, find.text('Start ride'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pick up your passenger in'), findsOneWidget);
+      expect(find.text('Order GR-TEST'), findsOneWidget);
+      expect(find.text('Rina Wulandari'), findsOneWidget);
+      expect(find.text('Passenger agreed to recording'), findsOneWidget);
+      expect(find.bySemanticsLabel('Passenger photo'), findsOneWidget);
+      expect(find.text('Your earnings (GoPay)'), findsOneWidget);
+      expect(
+        find.text('Edit'),
+        findsNothing,
+        reason: 'only the rider changes the drop-off',
+      );
+      expect(find.text('Galih Pambudi'), findsNothing);
+      expect(find.textContaining('Your driver'), findsNothing);
+
+      await h.say(tester, uncomfortable);
+      await tester.pumpAndSettle();
+      expect(find.text(SafetyText.warningDriver), findsOneWidget);
+      expect(find.text(SafetyText.warning), findsNothing);
+    },
+  );
+
+  testWidgets('the rider sees the driver', (tester) async {
+    final h = Harness();
+    await h.pump(tester);
+    await h.startRide(tester);
+    expect(find.text('Your driver will arrive in'), findsOneWidget);
+    expect(find.text('Galih Pambudi'), findsOneWidget);
+    expect(find.text('Your driver has Safe Ride on'), findsOneWidget);
+    expect(find.text('Rina Wulandari'), findsNothing);
+    expect(find.text('Edit'), findsOneWidget);
+  });
+
   testWidgets('a driver with no ride waiting is told what to do', (
     tester,
   ) async {

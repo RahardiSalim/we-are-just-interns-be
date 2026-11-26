@@ -44,6 +44,10 @@ const _demoRide = (
   driver: 'Galih Pambudi',
   trips: '120 total trips',
   rating: '4.5',
+  // What the driver's phone shows about the rider. shortcut: a stand-in until the order carries it.
+  passenger: 'Rina Wulandari',
+  passengerTrips: '48 rides',
+  passengerRating: '4.9',
   pickup: 'Hotel Grandhika',
   dropoff: 'Hotel Grand Kemang',
   distance: '25 min • 15km',
@@ -132,6 +136,7 @@ class _TripScreenState extends State<TripScreen> {
   String? _tripId;
   bool _recording = false;
   bool? _driverSafeRide;
+  bool? _riderConsent; // shown on the driver's phone
   bool? _backendUp;
   bool _busy = false;
   // The safety pop-up on screen (a warning, "Are you okay?", "We've reported…"): one at a time,
@@ -252,6 +257,7 @@ class _TripScreenState extends State<TripScreen> {
         _recording = micOn;
         _micLevel = micOn ? widget.recorder.level : null;
         _driverSafeRide = trip?.driverConsent;
+        _riderConsent = trip?.riderConsent;
         _rideStart = DateTime.now();
         _notice = both && !micOn
             ? 'Allow microphone access to record your rides.'
@@ -401,7 +407,9 @@ class _TripScreenState extends State<TripScreen> {
         if (d.nth >= 2) _raise(Share.atEnd);
         // A warning never replaces an open "Are you okay?": that question matters more.
         if (_highCheck != null || _shout) break;
-        _showPopup(() => askWarning(context, again: d.nth >= 2)).then((r) {
+        _showPopup(
+          () => askWarning(context, again: d.nth >= 2, driver: _driver),
+        ).then((r) {
           if (r.$1 && r.$2 == true) _reportOther();
         });
       case SafetyAction.high:
@@ -509,7 +517,11 @@ class _TripScreenState extends State<TripScreen> {
   }
 
   Future<void> _editSafePhrase() async {
-    final saved = await askSafePhrase(context, _phrase?.phrase ?? '');
+    final saved = await askSafePhrase(
+      context,
+      _phrase?.phrase ?? '',
+      driver: _driver,
+    );
     if (saved == null || !mounted) return;
     await widget.store.setSafePhrase(saved);
     setState(() => _phrase = SafePhrase(saved));
@@ -920,8 +932,10 @@ class _TripScreenState extends State<TripScreen> {
                     onPointerSignal: (e) => _wheel(e, scroll, h),
                     child: Stack(
                       children: [
-                        const EtaBanner(
-                          text: 'Your driver will arrive in',
+                        EtaBanner(
+                          text: _driver
+                              ? 'Pick up your passenger in'
+                              : 'Your driver will arrive in',
                           highlight: '5 min',
                         ),
                         Container(
@@ -963,6 +977,24 @@ class _TripScreenState extends State<TripScreen> {
     });
   }
 
+  /// Whether the other person agreed to the recording: the driver's Safe Ride on the rider's
+  /// phone, the rider's answer to the consent prompt on the driver's phone.
+  Widget _consentPill() {
+    final on = (_driver ? _riderConsent : _driverSafeRide) == true;
+    return Pill(
+      switch ((_driver, on)) {
+        (false, true) => 'Your driver has Safe Ride on',
+        (false, false) => "Your driver hasn't turned on Safe Ride",
+        (true, true) => 'Passenger agreed to recording',
+        (true, false) => "Passenger didn't agree to recording",
+      },
+      icon: on ? Icons.verified_user_rounded : Icons.shield_outlined,
+      color: on ? GoSafeColors.brandDeep : GoSafeColors.muted,
+      tint: on ? GoSafeColors.brandTint : GoSafeColors.canvas,
+      border: on ? GoSafeColors.brandTint : GoSafeColors.lineSoft,
+    );
+  }
+
   /// The same ride always gets the same plate and map.
   int get _seed => (_tripId ?? '').hashCode & 0x7fffffff;
 
@@ -985,13 +1017,22 @@ class _TripScreenState extends State<TripScreen> {
           ),
         ),
         ...alerts,
-        // Plate number, call and chat.
+        // The rider sees the driver's plate; the driver sees the order. Both can call and chat.
         GoCard(
           padding: const EdgeInsets.fromLTRB(20, 14, 16, 14),
           child: Row(
             spacing: 12,
             children: [
-              Expanded(child: Text(onRide ? _plate(_seed) : '…', style: title)),
+              Expanded(
+                child: Text(
+                  !onRide
+                      ? '…'
+                      : _driver
+                      ? 'Order $_tripId'
+                      : _plate(_seed),
+                  style: title,
+                ),
+              ),
               const RoundAction(Icons.call_rounded, tooltip: 'Call'),
               const RoundAction(Icons.chat_rounded, tooltip: 'Chat'),
             ],
@@ -1028,19 +1069,22 @@ class _TripScreenState extends State<TripScreen> {
                 color: GoSafeColors.dropoff,
                 label: 'Drop off location',
                 value: ride.dropoff,
-                trailing: OutlinedButton(
-                  style: OutlinedButton.styleFrom(
-                    minimumSize: const Size(0, 36),
-                    padding: const EdgeInsets.symmetric(horizontal: 18),
-                    side: const BorderSide(
-                      color: GoSafeColors.ride,
-                      width: 1.5,
-                    ),
-                    foregroundColor: GoSafeColors.ride,
-                  ),
-                  onPressed: () {},
-                  child: const Text('Edit'),
-                ),
+                // Only the rider can change where the ride goes.
+                trailing: _driver
+                    ? null
+                    : OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          minimumSize: const Size(0, 36),
+                          padding: const EdgeInsets.symmetric(horizontal: 18),
+                          side: const BorderSide(
+                            color: GoSafeColors.ride,
+                            width: 1.5,
+                          ),
+                          foregroundColor: GoSafeColors.ride,
+                        ),
+                        onPressed: () {},
+                        child: const Text('Edit'),
+                      ),
               ),
             ],
           ),
@@ -1057,7 +1101,12 @@ class _TripScreenState extends State<TripScreen> {
                 tint: GoSafeColors.gopay,
                 size: 28,
               ),
-              Expanded(child: Text('GoPay', style: text.titleSmall)),
+              Expanded(
+                child: Text(
+                  _driver ? 'Your earnings (GoPay)' : 'GoPay',
+                  style: text.titleSmall,
+                ),
+              ),
               Text(ride.fare, style: title),
             ],
           ),
@@ -1088,7 +1137,8 @@ class _TripScreenState extends State<TripScreen> {
             ),
           ),
         ),
-        // The driver: name, trips, Safe Ride, photo with rating.
+        // The other person: the driver on the rider's phone (name, trips, Safe Ride, photo), the
+        // passenger on the driver's phone (name, rides, whether they agreed to the recording).
         GoCard(
           padding: const EdgeInsets.fromLTRB(20, 16, 16, 16),
           child: Row(
@@ -1099,39 +1149,32 @@ class _TripScreenState extends State<TripScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   spacing: 8,
                   children: [
-                    Text(ride.driver, style: title),
+                    Text(_driver ? ride.passenger : ride.driver, style: title),
                     Wrap(
                       spacing: 6,
                       runSpacing: 6,
                       children: [
                         Pill(
-                          ride.trips,
+                          _driver ? ride.passengerTrips : ride.trips,
                           color: GoSafeColors.muted,
                           border: GoSafeColors.lineSoft,
                         ),
-                        Pill(
-                          _driverSafeRide == true
-                              ? 'Your driver has Safe Ride on'
-                              : "Your driver hasn't turned on Safe Ride",
-                          icon: _driverSafeRide == true
-                              ? Icons.verified_user_rounded
-                              : Icons.shield_outlined,
-                          color: _driverSafeRide == true
-                              ? GoSafeColors.brandDeep
-                              : GoSafeColors.muted,
-                          tint: _driverSafeRide == true
-                              ? GoSafeColors.brandTint
-                              : GoSafeColors.canvas,
-                          border: _driverSafeRide == true
-                              ? GoSafeColors.brandTint
-                              : GoSafeColors.lineSoft,
-                        ),
+                        _consentPill(),
                       ],
                     ),
                   ],
                 ),
               ),
-              DriverPhoto(asset: 'assets/ride/driver.png', rating: ride.rating),
+              _driver
+                  ? DriverPhoto(
+                      emoji: '🐱', // stand-in: no passenger photo in the demo
+                      rating: ride.passengerRating,
+                      label: 'Passenger photo',
+                    )
+                  : DriverPhoto(
+                      asset: 'assets/ride/driver.png',
+                      rating: ride.rating,
+                    ),
             ],
           ),
         ),

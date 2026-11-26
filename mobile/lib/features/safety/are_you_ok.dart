@@ -19,6 +19,16 @@ abstract final class SafetyText {
       'This is the second time the conversation has turned uncomfortable. '
       "We'll share this ride's recording with our safety team when it ends. "
       'If you feel unsafe, report it now.';
+  // The driver's phone hears the same conversation: a nudge to keep it professional, and help if the
+  // passenger is the one causing trouble.
+  static const warningDriver =
+      'This conversation seems to be getting uncomfortable. '
+      'Please keep it polite and professional with your passenger. '
+      "If you feel unsafe, we're right here.";
+  static const warningAgainDriver =
+      'This is the second time the conversation has turned uncomfortable. '
+      "We'll share this ride's recording with our safety team when it ends. "
+      'Please keep it professional. If your passenger makes you feel unsafe, report it now.';
   static const warningTitle = 'Is everything okay?';
   static const warningAgainTitle = 'This happened again';
   static const warningFine = "I'm fine";
@@ -195,30 +205,38 @@ Future<bool?> askNeedHelp(BuildContext context, {required bool driver}) =>
 
 /// The warning, 1st or 2nd ([again]) on the ride. True for "Report"; false or null (swiped away)
 /// for "I'm fine".
-Future<bool?> askWarning(BuildContext context, {bool again = false}) =>
-    showGoSheet<bool>(
-      context,
-      icon: Icons.volunteer_activism_rounded,
-      color: GoSafeColors.unsafe,
-      tint: GoSafeColors.warnTint,
-      title: again ? SafetyText.warningAgainTitle : SafetyText.warningTitle,
-      body: again ? SafetyText.warningAgain : SafetyText.warning,
-      dismissible: true,
-      actions: (c) => [
-        _primary(c, SafetyText.warningFine, false, GoSafeColors.ride),
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: GoSafeColors.high,
-              side: const BorderSide(color: GoSafeColors.high, width: 1.5),
-            ),
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text(SafetyText.warningReport),
-          ),
+Future<bool?> askWarning(
+  BuildContext context, {
+  bool again = false,
+  bool driver = false,
+}) => showGoSheet<bool>(
+  context,
+  icon: Icons.volunteer_activism_rounded,
+  color: GoSafeColors.unsafe,
+  tint: GoSafeColors.warnTint,
+  title: again ? SafetyText.warningAgainTitle : SafetyText.warningTitle,
+  body: switch ((again, driver)) {
+    (false, false) => SafetyText.warning,
+    (true, false) => SafetyText.warningAgain,
+    (false, true) => SafetyText.warningDriver,
+    (true, true) => SafetyText.warningAgainDriver,
+  },
+  dismissible: true,
+  actions: (c) => [
+    _primary(c, SafetyText.warningFine, false, GoSafeColors.ride),
+    Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: GoSafeColors.high,
+          side: const BorderSide(color: GoSafeColors.high, width: 1.5),
         ),
-      ],
-    );
+        onPressed: () => Navigator.pop(c, true),
+        child: const Text(SafetyText.warningReport),
+      ),
+    ),
+  ],
+);
 
 /// Returns true for "I'm okay", false for "I need help".
 /// [again]: the 2nd high flag on the ride, when the ride has gone Live.
@@ -267,21 +285,25 @@ Future<bool> askConsent(BuildContext context) async =>
 
 /// Asks for a safe phrase, in the same Gojek bottom sheet as the other pop-ups. Returns it
 /// trimmed, or null if cancelled. The sheet rises above the keyboard.
-Future<String?> askSafePhrase(BuildContext context, String current) =>
-    showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true, // so it can move up with the keyboard
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      backgroundColor: GoSafeColors.canvas,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => _SafePhraseSheet(current: current),
-    );
+Future<String?> askSafePhrase(
+  BuildContext context,
+  String current, {
+  bool driver = false,
+}) => showModalBottomSheet<String>(
+  context: context,
+  isScrollControlled: true, // so it can move up with the keyboard
+  barrierColor: Colors.black.withValues(alpha: 0.5),
+  backgroundColor: GoSafeColors.canvas,
+  shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+  ),
+  builder: (context) => _SafePhraseSheet(current: current, driver: driver),
+);
 
 class _SafePhraseSheet extends StatefulWidget {
-  const _SafePhraseSheet({required this.current});
+  const _SafePhraseSheet({required this.current, this.driver = false});
   final String current;
+  final bool driver; // the example sentence is the driver's own
 
   @override
   State<_SafePhraseSheet> createState() => _SafePhraseSheetState();
@@ -377,7 +399,9 @@ class _SafePhraseSheetState extends State<_SafePhraseSheet> {
               style: GoSafeType.bodyModerate.copyWith(color: GoSafeColors.ink),
               cursorColor: GoSafeColors.ride,
               decoration: InputDecoration(
-                hintText: 'Pak, nanti lewat jalan biasa aja ya',
+                hintText: widget.driver
+                    ? 'Kak, sebentar saya isi bensin dulu ya'
+                    : 'Pak, nanti lewat jalan biasa aja ya',
                 hintStyle: GoSafeType.bodyModerate.copyWith(
                   color: GoSafeColors.label,
                 ),
