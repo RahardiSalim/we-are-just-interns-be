@@ -103,11 +103,6 @@ abstract interface class RideStore {
   /// The user's own safe phrase (the hands-free alarm), kept encrypted with the rides. Null until set.
   Future<String?> safePhrase();
   Future<void> setSafePhrase(String phrase);
-
-  /// The email the safety team writes to, kept encrypted on the phone and sent to the backend
-  /// (`POST /me/email`) when a ride starts. Null until set.
-  Future<String?> email();
-  Future<void> setEmail(String email);
 }
 
 /// Deletes rides older than [keepFor] and returns the ones kept.
@@ -133,14 +128,6 @@ class MemoryRideStore implements RideStore {
 
   @override
   Future<void> setSafePhrase(String phrase) async => _phrase = phrase;
-
-  String? _email;
-
-  @override
-  Future<String?> email() async => _email;
-
-  @override
-  Future<void> setEmail(String email) async => _email = email;
 
   @override
   Future<void> addPiece(String tripId, int index, Uint8List bytes) async =>

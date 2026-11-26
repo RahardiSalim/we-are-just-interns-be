@@ -90,10 +90,9 @@ Every endpoint takes `Authorization: Bearer <Firebase ID token>`; the backend ch
 | `GET /health` | Anyone | Liveness |
 | `POST /me/fcm-token` | App | Saves the device push token |
 | `POST /me/consent` | Driver phone | Sets `audioConsent`: the driver's Safe Ride setting |
-| `POST /me/email` | App | Body: `email`. Sets `users.email`, where the safety team's emails go for the phone's anonymous account (an Auth account's own email wins). The app sends it with every ride; 422 if it isn't an email |
 | `POST /trips` | App | Body: `riderConsent` (the consumer's answer), optional `orderId` (the GoJek order ID, which becomes the `tripId`; generated for the demo when missing), `mode`. Driver consent comes from the driver's Safe Ride setting. Assigns the demo driver; 409 if the order already has a trip. With `role: driver` the driver's phone joins the trip instead (by `orderId`, or for the demo the newest active trip still waiting for a driver; 404 if none) |
 | `POST /trips/{id}/events` | App | Batch of SOS / manual-unsafe events with a timestamp. No location fields |
-| `POST /trips/{id}/end` | App | Ends the trip |
+| `POST /trips/{id}/end` | App | Ends the trip. This phone streams no more: its `recordings.<role>.live` goes false and the ride's cases lose LIVE unless the other phone is still streaming (also when the last upload never comes) |
 | `PUT /trips/{id}/recording` | App | This phone's recording details: `durationSec`, `contentType`, `markers`, `transcript`, `pieces` (uploaded so far), `live`, `done`. Needs both consents and a `high`, `sos` or `manual_unsafe` marker (409 otherwise). `live` marks the ride's open case LIVE; `done` starts the AI review |
 | `POST /trips/{id}/recording/pieces/{n}` | App | Upload URL + method for audio piece `n` (`recordings/{tripId}/{rider\|driver}/{n:06}.aac`). Needs the details first |
 | `GET /trips/{id}/recording-urls` | Dashboard (agent) | Short-lived read URLs for every piece, per phone; writes an audit log. The dashboard joins them to play |

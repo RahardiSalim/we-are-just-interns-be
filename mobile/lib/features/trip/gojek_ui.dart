@@ -400,12 +400,21 @@ class EtaBanner extends StatelessWidget {
   );
 }
 
-/// The driver's photo in a rounded square with the rating badge over its bottom edge.
+/// The other person's photo in a rounded square with the rating badge over its bottom edge: the
+/// driver's photo ([asset]) on the rider's phone, or a stand-in picture ([emoji]) for the passenger.
 class DriverPhoto extends StatelessWidget {
-  const DriverPhoto({super.key, required this.asset, required this.rating});
+  const DriverPhoto({
+    super.key,
+    this.asset,
+    this.emoji,
+    required this.rating,
+    this.label = 'Driver photo',
+  }) : assert(asset != null || emoji != null);
 
-  final String asset;
+  final String? asset;
+  final String? emoji;
   final String rating;
+  final String label;
 
   @override
   Widget build(BuildContext context) => SizedBox(
@@ -417,13 +426,25 @@ class DriverPhoto extends StatelessWidget {
       children: [
         ClipRRect(
           borderRadius: BorderRadius.circular(18),
-          child: Image.asset(
-            asset,
-            width: 64,
-            height: 64,
-            fit: BoxFit.cover,
-            semanticLabel: 'Driver photo',
-          ),
+          child: asset != null
+              ? Image.asset(
+                  asset!,
+                  width: 64,
+                  height: 64,
+                  fit: BoxFit.cover,
+                  semanticLabel: label,
+                )
+              : Container(
+                  width: 64,
+                  height: 64,
+                  color: GoSafeColors.brandTint,
+                  alignment: Alignment.center,
+                  child: Text(
+                    emoji!,
+                    semanticsLabel: label,
+                    style: const TextStyle(fontSize: 36),
+                  ),
+                ),
         ),
         Positioned(
           bottom: 0,

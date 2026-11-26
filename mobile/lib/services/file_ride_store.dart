@@ -62,33 +62,22 @@ class FileRideStore implements RideStore {
   }
 
   File get _phraseFile => File('${root.path}/safe_phrase.enc');
-  File get _emailFile => File('${root.path}/email.enc');
 
-  Future<String?> _read(File f) async {
-    if (!f.existsSync()) return null;
+  @override
+  Future<String?> safePhrase() async {
+    if (!_phraseFile.existsSync()) return null;
     try {
-      return utf8.decode(await open(f.path));
+      return utf8.decode(await open(_phraseFile.path));
     } catch (_) {
       return null; // sealed by a key that's gone (app reinstalled): ask again
     }
   }
 
-  Future<void> _write(File f, String value) async {
+  @override
+  Future<void> setSafePhrase(String phrase) async {
     await root.create(recursive: true);
-    await seal(f.path, utf8.encode(value));
+    await seal(_phraseFile.path, utf8.encode(phrase));
   }
-
-  @override
-  Future<String?> safePhrase() => _read(_phraseFile);
-
-  @override
-  Future<void> setSafePhrase(String phrase) => _write(_phraseFile, phrase);
-
-  @override
-  Future<String?> email() => _read(_emailFile);
-
-  @override
-  Future<void> setEmail(String email) => _write(_emailFile, email);
 
   @override
   Future<void> delete(String tripId) async {

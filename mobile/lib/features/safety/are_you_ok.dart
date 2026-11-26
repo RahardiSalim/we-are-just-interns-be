@@ -19,6 +19,16 @@ abstract final class SafetyText {
       'This is the second time the conversation has turned uncomfortable. '
       "We'll share this ride's recording with our safety team when it ends. "
       'If you feel unsafe, report it now.';
+  // The driver's phone hears the same conversation: a nudge to keep it professional, and help if the
+  // passenger is the one causing trouble.
+  static const warningDriver =
+      'This conversation seems to be getting uncomfortable. '
+      'Please keep it polite and professional with your passenger. '
+      "If you feel unsafe, we're right here.";
+  static const warningAgainDriver =
+      'This is the second time the conversation has turned uncomfortable. '
+      "We'll share this ride's recording with our safety team when it ends. "
+      'Please keep it professional. If your passenger makes you feel unsafe, report it now.';
   static const warningTitle = 'Is everything okay?';
   static const warningAgainTitle = 'This happened again';
   static const warningFine = "I'm fine";
@@ -78,15 +88,6 @@ abstract final class SafetyText {
   static const safePhraseSaved = 'Safe phrase saved. Only you know it.';
   static const safePhrasePrivate =
       'Only you know it. It stays locked on this phone and is never sent.';
-
-  static const emailTitle = 'Email for updates';
-  static const emailHint =
-      'Where our safety team writes to you about a report: that we got it, and what we decided.';
-  static const emailPrivate =
-      'Only our safety team uses it, to write to you about your reports.';
-  static const emailInvalid = 'Enter an email like nama@email.com.';
-  static const emailSaved =
-      "Email saved. We'll write to you there about any report.";
 
   static const helpSent =
       "We're on it. Our safety team will contact you right away.";
@@ -204,30 +205,38 @@ Future<bool?> askNeedHelp(BuildContext context, {required bool driver}) =>
 
 /// The warning, 1st or 2nd ([again]) on the ride. True for "Report"; false or null (swiped away)
 /// for "I'm fine".
-Future<bool?> askWarning(BuildContext context, {bool again = false}) =>
-    showGoSheet<bool>(
-      context,
-      icon: Icons.volunteer_activism_rounded,
-      color: GoSafeColors.unsafe,
-      tint: GoSafeColors.warnTint,
-      title: again ? SafetyText.warningAgainTitle : SafetyText.warningTitle,
-      body: again ? SafetyText.warningAgain : SafetyText.warning,
-      dismissible: true,
-      actions: (c) => [
-        _primary(c, SafetyText.warningFine, false, GoSafeColors.ride),
-        Padding(
-          padding: const EdgeInsets.only(top: 8),
-          child: OutlinedButton(
-            style: OutlinedButton.styleFrom(
-              foregroundColor: GoSafeColors.high,
-              side: const BorderSide(color: GoSafeColors.high, width: 1.5),
-            ),
-            onPressed: () => Navigator.pop(c, true),
-            child: const Text(SafetyText.warningReport),
-          ),
+Future<bool?> askWarning(
+  BuildContext context, {
+  bool again = false,
+  bool driver = false,
+}) => showGoSheet<bool>(
+  context,
+  icon: Icons.volunteer_activism_rounded,
+  color: GoSafeColors.unsafe,
+  tint: GoSafeColors.warnTint,
+  title: again ? SafetyText.warningAgainTitle : SafetyText.warningTitle,
+  body: switch ((again, driver)) {
+    (false, false) => SafetyText.warning,
+    (true, false) => SafetyText.warningAgain,
+    (false, true) => SafetyText.warningDriver,
+    (true, true) => SafetyText.warningAgainDriver,
+  },
+  dismissible: true,
+  actions: (c) => [
+    _primary(c, SafetyText.warningFine, false, GoSafeColors.ride),
+    Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: OutlinedButton(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: GoSafeColors.high,
+          side: const BorderSide(color: GoSafeColors.high, width: 1.5),
         ),
-      ],
-    );
+        onPressed: () => Navigator.pop(c, true),
+        child: const Text(SafetyText.warningReport),
+      ),
+    ),
+  ],
+);
 
 /// Returns true for "I'm okay", false for "I need help".
 /// [again]: the 2nd high flag on the ride, when the ride has gone Live.
@@ -276,102 +285,47 @@ Future<bool> askConsent(BuildContext context) async =>
 
 /// Asks for a safe phrase, in the same Gojek bottom sheet as the other pop-ups. Returns it
 /// trimmed, or null if cancelled. The sheet rises above the keyboard.
-Future<String?> askSafePhrase(BuildContext context, String current) => _askText(
-  context,
-  _TextSheet(
-    current: current,
-    icon: Icons.record_voice_over_rounded,
-    title: SafetyText.safePhraseTitle,
-    hint: SafetyText.safePhraseHint,
-    placeholder: 'Pak, nanti lewat jalan biasa aja ya',
-    prefixIcon: Icons.format_quote_rounded,
-    note: SafetyText.safePhrasePrivate,
-    problem: SafePhrase.problem,
-    // Live count against the 4 to 12 words the phrase needs.
-    helper: (text) {
-      final words = text.trim().isEmpty
-          ? 0
-          : text.trim().split(RegExp(r'\s+')).length;
-      return ('$words of 4–12 words', words >= 4 && words <= 12);
-    },
+Future<String?> askSafePhrase(
+  BuildContext context,
+  String current, {
+  bool driver = false,
+}) => showModalBottomSheet<String>(
+  context: context,
+  isScrollControlled: true, // so it can move up with the keyboard
+  barrierColor: Colors.black.withValues(alpha: 0.5),
+  backgroundColor: GoSafeColors.canvas,
+  shape: const RoundedRectangleBorder(
+    borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
   ),
+  builder: (context) => _SafePhraseSheet(current: current, driver: driver),
 );
 
-/// The email the safety team writes to (SOS received, the outcome of a report). Null: cancelled.
-Future<String?> askEmail(BuildContext context, String current) => _askText(
-  context,
-  _TextSheet(
-    current: current,
-    icon: Icons.mail_outline_rounded,
-    title: SafetyText.emailTitle,
-    hint: SafetyText.emailHint,
-    placeholder: 'nama@email.com',
-    prefixIcon: Icons.alternate_email_rounded,
-    note: SafetyText.emailPrivate,
-    keyboard: TextInputType.emailAddress,
-    capitalization: TextCapitalization.none,
-    problem: (text) => RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(text)
-        ? null
-        : SafetyText.emailInvalid,
-  ),
-);
-
-Future<String?> _askText(BuildContext context, _TextSheet sheet) =>
-    showModalBottomSheet<String>(
-      context: context,
-      isScrollControlled: true, // so it can move up with the keyboard
-      barrierColor: Colors.black.withValues(alpha: 0.5),
-      backgroundColor: GoSafeColors.canvas,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (context) => sheet,
-    );
-
-/// One text setting in a Gojek bottom sheet: the safe phrase or the email.
-class _TextSheet extends StatefulWidget {
-  const _TextSheet({
-    required this.current,
-    required this.icon,
-    required this.title,
-    required this.hint,
-    required this.placeholder,
-    required this.prefixIcon,
-    required this.note,
-    required this.problem,
-    this.helper,
-    this.keyboard,
-    this.capitalization = TextCapitalization.sentences,
-  });
+class _SafePhraseSheet extends StatefulWidget {
+  const _SafePhraseSheet({required this.current, this.driver = false});
   final String current;
-  final IconData icon, prefixIcon;
-  final String title, hint, placeholder, note;
-
-  /// Why the text can't be saved, or null when it can.
-  final String? Function(String text) problem;
-
-  /// A line under the field and whether it's met (green), e.g. a word count.
-  final (String, bool) Function(String text)? helper;
-  final TextInputType? keyboard;
-  final TextCapitalization capitalization;
+  final bool driver; // the example sentence is the driver's own
 
   @override
-  State<_TextSheet> createState() => _TextSheetState();
+  State<_SafePhraseSheet> createState() => _SafePhraseSheetState();
 }
 
-class _TextSheetState extends State<_TextSheet> {
+class _SafePhraseSheetState extends State<_SafePhraseSheet> {
   late final _text = TextEditingController(text: widget.current)
     ..addListener(() => setState(() => _problem = null));
   String? _problem;
 
+  int get _words => _text.text.trim().isEmpty
+      ? 0
+      : _text.text.trim().split(RegExp(r'\s+')).length;
+
   void _save() {
-    final value = _text.text.trim();
-    final problem = widget.problem(value);
+    final phrase = _text.text.trim();
+    final problem = SafePhrase.problem(phrase);
     if (problem != null) {
       setState(() => _problem = problem);
       return;
     }
-    Navigator.pop(context, value);
+    Navigator.pop(context, phrase);
   }
 
   @override
@@ -387,131 +341,131 @@ class _TextSheetState extends State<_TextSheet> {
       );
 
   @override
-  Widget build(BuildContext context) {
-    final helper = widget.helper?.call(_text.text);
-    return Padding(
-      padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
-      child: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: GoSafeColors.handle,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
+  Widget build(BuildContext context) => Padding(
+    padding: EdgeInsets.only(bottom: MediaQuery.viewInsetsOf(context).bottom),
+    child: SafeArea(
+      child: Padding(
+        padding: const EdgeInsets.fromLTRB(24, 12, 24, 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: GoSafeColors.handle,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
-              const SizedBox(height: 20),
-              Row(
-                spacing: 12,
-                children: [
-                  Container(
-                    width: 44,
-                    height: 44,
-                    decoration: const BoxDecoration(
-                      color: GoSafeColors.brandTint,
-                      shape: BoxShape.circle,
+            ),
+            const SizedBox(height: 20),
+            Row(
+              spacing: 12,
+              children: [
+                Container(
+                  width: 44,
+                  height: 44,
+                  decoration: const BoxDecoration(
+                    color: GoSafeColors.brandTint,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.record_voice_over_rounded,
+                    color: GoSafeColors.ride,
+                  ),
+                ),
+                const Expanded(
+                  child: Text(
+                    SafetyText.safePhraseTitle,
+                    style: GoSafeType.titleSmall,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Text(
+              SafetyText.safePhraseHint,
+              style: GoSafeType.bodyModerate.copyWith(
+                color: GoSafeColors.muted,
+              ),
+            ),
+            const SizedBox(height: 20),
+            TextField(
+              controller: _text,
+              autofocus: true,
+              textCapitalization: TextCapitalization.sentences,
+              style: GoSafeType.bodyModerate.copyWith(color: GoSafeColors.ink),
+              cursorColor: GoSafeColors.ride,
+              decoration: InputDecoration(
+                hintText: widget.driver
+                    ? 'Kak, sebentar saya isi bensin dulu ya'
+                    : 'Pak, nanti lewat jalan biasa aja ya',
+                hintStyle: GoSafeType.bodyModerate.copyWith(
+                  color: GoSafeColors.label,
+                ),
+                filled: true,
+                fillColor: GoSafeColors.surface,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 14,
+                ),
+                prefixIcon: const Icon(
+                  Icons.format_quote_rounded,
+                  color: GoSafeColors.label,
+                ),
+                border: _border(GoSafeColors.lineSoft),
+                enabledBorder: _border(GoSafeColors.lineSoft),
+                focusedBorder: _border(GoSafeColors.ride, 1.5),
+                errorBorder: _border(GoSafeColors.high, 1.5),
+                focusedErrorBorder: _border(GoSafeColors.high, 1.5),
+                errorText: _problem,
+                errorMaxLines: 2,
+                // Live count against the 4 to 12 words the phrase needs.
+                helperText: '$_words of 4–12 words',
+                helperStyle: GoSafeType.caption.copyWith(
+                  color: _words >= 4 && _words <= 12
+                      ? GoSafeColors.brandDeep
+                      : GoSafeColors.label,
+                ),
+              ),
+              onSubmitted: (_) => _save(),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              spacing: 8,
+              children: [
+                const Icon(
+                  Icons.lock_rounded,
+                  size: 16,
+                  color: GoSafeColors.label,
+                ),
+                Expanded(
+                  child: Text(
+                    SafetyText.safePhrasePrivate,
+                    style: GoSafeType.caption.copyWith(
+                      color: GoSafeColors.label,
                     ),
-                    child: Icon(widget.icon, color: GoSafeColors.ride),
-                  ),
-                  Expanded(
-                    child: Text(widget.title, style: GoSafeType.titleSmall),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                widget.hint,
-                style: GoSafeType.bodyModerate.copyWith(
-                  color: GoSafeColors.muted,
-                ),
-              ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _text,
-                autofocus: true,
-                keyboardType: widget.keyboard,
-                autocorrect: widget.keyboard != TextInputType.emailAddress,
-                textCapitalization: widget.capitalization,
-                style: GoSafeType.bodyModerate.copyWith(
-                  color: GoSafeColors.ink,
-                ),
-                cursorColor: GoSafeColors.ride,
-                decoration: InputDecoration(
-                  hintText: widget.placeholder,
-                  hintStyle: GoSafeType.bodyModerate.copyWith(
-                    color: GoSafeColors.label,
-                  ),
-                  filled: true,
-                  fillColor: GoSafeColors.surface,
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 14,
-                  ),
-                  prefixIcon: Icon(
-                    widget.prefixIcon,
-                    color: GoSafeColors.label,
-                  ),
-                  border: _border(GoSafeColors.lineSoft),
-                  enabledBorder: _border(GoSafeColors.lineSoft),
-                  focusedBorder: _border(GoSafeColors.ride, 1.5),
-                  errorBorder: _border(GoSafeColors.high, 1.5),
-                  focusedErrorBorder: _border(GoSafeColors.high, 1.5),
-                  errorText: _problem,
-                  errorMaxLines: 2,
-                  helperText: helper?.$1,
-                  helperStyle: GoSafeType.caption.copyWith(
-                    color: helper?.$2 ?? false
-                        ? GoSafeColors.brandDeep
-                        : GoSafeColors.label,
                   ),
                 ),
-                onSubmitted: (_) => _save(),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                spacing: 8,
-                children: [
-                  const Icon(
-                    Icons.lock_rounded,
-                    size: 16,
-                    color: GoSafeColors.label,
-                  ),
-                  Expanded(
-                    child: Text(
-                      widget.note,
-                      style: GoSafeType.caption.copyWith(
-                        color: GoSafeColors.label,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 24),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: GoSafeColors.ride,
-                ),
-                onPressed: _save,
-                child: const Text('Save'),
-              ),
-              const SizedBox(height: 8),
-              TextButton(
-                style: TextButton.styleFrom(foregroundColor: GoSafeColors.ride),
-                onPressed: () => Navigator.pop(context),
-                child: const Text('Cancel'),
-              ),
-            ],
-          ),
+              ],
+            ),
+            const SizedBox(height: 24),
+            FilledButton(
+              style: FilledButton.styleFrom(backgroundColor: GoSafeColors.ride),
+              onPressed: _save,
+              child: const Text('Save'),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              style: TextButton.styleFrom(foregroundColor: GoSafeColors.ride),
+              onPressed: () => Navigator.pop(context),
+              child: const Text('Cancel'),
+            ),
+          ],
         ),
       ),
-    );
-  }
+    ),
+  );
 }

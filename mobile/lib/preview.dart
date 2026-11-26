@@ -16,6 +16,8 @@ import 'theme.dart';
 /// browser. `flutter run -d chrome -t lib/preview.dart`. Nothing leaves the page.
 final store = MemoryRideStore();
 final _scenario = scenarioNamed(Uri.base.queryParameters['scenario'] ?? '');
+// ?role=driver shows the driver's phone, so the two sides can sit in two tabs.
+final _role = Uri.base.queryParameters['role'] == 'driver' ? 'driver' : 'rider';
 
 void main() => runApp(
   MaterialApp(
@@ -32,6 +34,7 @@ void main() => runApp(
       recorder: MicRecorder(store),
       store: store,
       autoStart: true,
+      role: _role,
       // A calm ride, so the signal moves without raising any alarm.
       // ?scenario=warning2 (none, warning1-3, high1-3) plays a test ride from
       // lib/engine/scenarios.dart; without it, a calm ride.
