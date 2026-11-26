@@ -111,6 +111,21 @@ One shared Firebase + GCP project, emulators locally, a `DEMO_MODE` flag instead
 
 Demo-day checklist: call `/health` to warm Cloud Run, reset + seed, phone charged with mobile data on, dashboard open and logged in, backup video one click away.
 
+## On hold
+
+Waiting on something outside the code. Build around these with stubs or seed data until they land.
+
+| Item | Waiting on | Until then |
+|---|---|---|
+| IndoBERT classifier (ONNX int8) | Modelling team: dataset + fine-tune + export | Seeded incidents carry a fixed `label` and `score` |
+| Chirp 3 STT | Firebase/GCP project on Blaze, Speech API enabled | Seeded transcript |
+| Sahabat-AI summary | A hosted endpoint (`LLM_BASE_URL`, `LLM_API_KEY`) | Seeded summary |
+| On-device STT / classifier | Modelling team ONNX exports, a test phone | Cloud path only |
+| Sample audio + real GPS trace | Team recordings | `contracts/fixtures/demo-trip.json` (hand-made route), `clipPath: null` |
+| Firebase project | Blaze plan + budget alert | Emulators (`demo-gosafe`) |
+| Backend deploy | GitHub repo variables `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA` (Workload Identity Federation) | Run locally |
+| Mobile app | Flutter SDK + Android phone on a dev machine | Not started |
+
 ## Decisions (where the two source docs disagreed)
 
 - **Severity is decided in the backend** for the demo (cloud path). The on-phone path arrives later through rule 4 with no API change.

@@ -1,0 +1,41 @@
+name: backend
+
+on:
+  push:
+    branches: [main]
+    paths: ["backend/**", "contracts/fixtures/**", ".github/workflows/backend.yml"]
+  pull_request:
+    paths: ["backend/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults: { run: { working-directory: backend } }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - run: uv sync --frozen
+      - run: uv run pytest -q
+
+  deploy:
+    needs: test
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    permissions: { contents: read, id-token: write }
+    steps:
+      - uses: actions/checkout@v4
+      - run: cp -r contracts/fixtures backend/fixtures
+      # Repo variables to set once: GCP_PROJECT, GCP_WIF_PROVIDER, GCP_DEPLOY_SA (see contracts/ARCHITECTURE.md "On hold").
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ vars.GCP_WIF_PROVIDER }}
+          service_account: ${{ vars.GCP_DEPLOY_SA }}
+      - uses: google-github-actions/deploy-cloudrun@v2
+        with:
+          service: gosafe-api
+          region: asia-southeast2
+          source: backend
+          flags: --memory=2Gi --min-instances=0 --no-cpu-throttling --allow-unauthenticated
+          env_vars: |
+            GCP_PROJECT=${{ vars.GCP_PROJECT }}
+            ENABLE_DEV_ROUTES=true

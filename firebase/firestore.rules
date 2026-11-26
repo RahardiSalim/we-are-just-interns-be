@@ -1,0 +1,33 @@
+rules_version = '2';
+
+// Clients only read. Every write goes through the backend (admin SDK bypasses these rules).
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null; }
+    function isAgent() { return signedIn() && request.auth.token.role == 'agent'; }
+
+    match /users/{uid} {
+      allow read: if isAgent() || (signedIn() && request.auth.uid == uid);
+    }
+
+    match /trips/{tripId} {
+      allow read: if isAgent() || (signedIn() && request.auth.uid in [resource.data.riderId, resource.data.driverId]);
+      match /events/{eventId} {
+        allow read: if isAgent();
+      }
+    }
+
+    // shortcut: reporter reads the whole incident doc; rules can't hide fields, split into a public sub-doc if that matters.
+    match /incidents/{incidentId} {
+      allow read: if isAgent() || (signedIn() && resource.data.reportedBy == request.auth.uid);
+    }
+
+    match /checkins/{checkinId} {
+      allow read: if isAgent() || (signedIn() && resource.data.userId == request.auth.uid);
+    }
+
+    match /auditLogs/{logId} {
+      allow read: if isAgent();
+    }
+  }
+}

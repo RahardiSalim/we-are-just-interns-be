@@ -8,5 +8,17 @@ Follow the root [CLAUDE.md](../CLAUDE.md) rules and [contracts/ARCHITECTURE.md](
 - Layout: `app/api/` routes, `app/services/` Firestore/Storage/FCM/STT/LLM, `app/ml/` classifier, `app/models/` Pydantic, `app/core/` config + auth; `scripts/seed.py`, `scripts/export_openapi.py`; `tests/`.
 - Auth: verify the Firebase ID token on every route except `/health`; check the `role` claim.
 - Config: env vars only (see ARCHITECTURE.md). `/dev/*` routes only when `ENABLE_DEV_ROUTES=true`.
-- Local: Firebase emulators + `uvicorn app.main:app --reload`. Tests use pytest against the emulators.
-- After changing any route: run `scripts/export_openapi.py` and commit `contracts/openapi.json`.
+- ML pieces (classifier, STT, LLM) are on hold; see "On hold" in ARCHITECTURE.md. Don't add `app/ml/` until a model exists.
+
+Commands (from `backend/`, needs `uv`):
+
+| Task | Command |
+|---|---|
+| Install | `uv sync` |
+| Test | `uv run pytest -q` (no Firebase needed; token checks are overridden) |
+| Run | `uv run uvicorn app.main:app --reload` |
+| Seed | `SEED_PASSWORD=... uv run python -m scripts.seed` (accounts are `<uid>@gosafe.test`) |
+| Export contract | `uv run python -m scripts.export_openapi` (after any route change; commit `contracts/openapi.json`) |
+| Deploy | push to `main`; `.github/workflows/backend.yml` tests then deploys to Cloud Run |
+
+Against the emulators, set `FIREBASE_AUTH_EMULATOR_HOST=localhost:9099` and `FIRESTORE_EMULATOR_HOST=localhost:8080` (start them from `firebase/` with `firebase emulators:start`).

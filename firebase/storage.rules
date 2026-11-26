@@ -1,0 +1,10 @@
+rules_version = '2';
+
+// No client access at all: uploads and downloads use signed URLs from the backend.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
