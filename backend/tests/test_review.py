@@ -32,8 +32,7 @@ def db_review(order):
     return db().document("trips", order).get().to_dict()["recording"].get("review")
 
 
-def test_without_sahabat_ai_the_rules_review_the_whole_ride(client, login, db, monkeypatch):
-    monkeypatch.setattr(config, "LLM_BASE_URL", "")
+def test_without_a_model_the_rules_review_the_whole_ride(client, login, db):
     r = ride_with_recording(client, login)
 
     assert r["source"] == "rules"
@@ -46,7 +45,7 @@ def test_sahabat_ai_reviews_the_masked_transcript(client, login, db, monkeypatch
     monkeypatch.setattr(config, "LLM_BASE_URL", "http://sahabat.test/v1")
     prompts = []
 
-    def fake_llm(messages):
+    def fake_llm(messages, provider):
         prompts.append(messages[-1]["content"])
         return json.dumps({
             "summary": "Pengemudi menanyakan status hubungan lalu mengajak penumpang mampir ke tempatnya.",
@@ -68,7 +67,27 @@ def test_sahabat_ai_reviews_the_masked_transcript(client, login, db, monkeypatch
 
 def test_a_broken_llm_answer_falls_back_to_the_rules(client, login, db, monkeypatch):
     monkeypatch.setattr(config, "LLM_BASE_URL", "http://sahabat.test/v1")
-    monkeypatch.setattr(review, "ask_llm", lambda messages: "Maaf, saya tidak bisa.")
+    monkeypatch.setattr(review, "ask_llm", lambda messages, provider: "Maaf, saya tidak bisa.")
     r = ride_with_recording(client, login)
     assert r["source"] == "rules"
-    assert "Sahabat-AI" in r["note"]
+    assert "sahabat-ai" in r["note"]
+
+
+def test_gemini_steps_in_when_sahabat_ai_fails(client, login, db, monkeypatch):
+    monkeypatch.setattr(config, "LLM_BASE_URL", "http://sahabat.test/v1")
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "test-key")
+
+    def fake_llm(messages, provider):
+        if provider["source"] == "sahabat-ai":
+            raise TimeoutError()
+        return json.dumps({"summary": "Ringkasan.", "label": "uncomfortable", "confidence": 0.6, "moments": []})
+
+    monkeypatch.setattr(review, "ask_llm", fake_llm)
+    r = ride_with_recording(client, login)
+    assert (r["source"], r["model"], r["label"]) == ("gemini", config.GEMINI_MODEL, "uncomfortable")
+    assert "sahabat-ai (TimeoutError)" in r["note"]
+
+
+def test_no_model_connected_says_so(client, login, db):
+    r = ride_with_recording(client, login)
+    assert r["source"] == "rules" and "No AI model is connected" in r["note"]

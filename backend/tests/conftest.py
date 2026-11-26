@@ -38,6 +38,7 @@ def db(monkeypatch):
     monkeypatch.setattr(storage, "signed_url", lambda path, method, *_: f"https://signed.test/{method}/{path}")
     monkeypatch.setattr(storage, "upload_bytes", lambda *_: None)
     monkeypatch.setattr(config, "LLM_BASE_URL", "")  # never call a real LLM from tests
+    monkeypatch.setattr(config, "GEMINI_API_KEY", "")
     seed.seed_data()
     from app.core.firebase import db as client
 

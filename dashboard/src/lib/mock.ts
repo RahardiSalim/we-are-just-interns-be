@@ -1,5 +1,6 @@
 import type { Timestamp } from "firebase/firestore";
-import type { Incident } from "@/types/firestore";
+import ride from "../../../contracts/fixtures/demo-ride.json";
+import type { Incident, Marker, Trip } from "@/types/firestore";
 
 // shortcut: no Firebase config means mock mode (no login, fake data); set NEXT_PUBLIC_FIREBASE_API_KEY to go live.
 export const MOCK = !process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -14,21 +15,18 @@ export const mockIncidents: Incident[] = [
     id: "demo-incident-1",
     tripId: "GR-DEMO-1",
     reportedBy: "rider1",
-    trigger: "sos",
+    trigger: "auto",
     status: "escalated",
     severity: "high",
     label: "sexual_harassment",
-    score: 0.91,
-    transcript: [
-      { start: 0, end: 4.2, text: "Mbak, rumahnya di mana? Tinggal sendiri ya?", flagged: false },
-      { start: 4.2, end: 9.8, text: "Cantik banget sih, mau nggak saya anterin tiap hari?", flagged: true },
-      { start: 9.8, end: 13.5, text: "Pak, tolong fokus nyetir aja.", flagged: false },
-      { start: 13.5, end: 19, text: "Ayo dong, nanti mampir dulu ke tempat saya.", flagged: true },
-    ],
-    summary:
-      "Penumpang menekan SOS setelah pengemudi berulang kali menanyakan alamat dan mengajak mampir. Penumpang meminta pengemudi fokus berkendara.",
+    score: 0.8,
+    // The phone's 30 s window when it flagged, as the backend seed stores it.
+    transcript: ride.transcript
+      .filter((l) => l.at <= 22)
+      .map((l) => ({ start: +(l.at - 1).toFixed(1), end: +(l.end - 1).toFixed(1), text: l.text, flagged: [9.8, 18.2, 22].includes(l.at) })),
+    summary: "Pemicu: deteksi otomatis di ponsel pada trip GR-DEMO-1. Penilaian otomatis: sexual_harassment (80%).",
     clipPath: null,
-    source: "cloud",
+    source: "device",
     assignedAgent: null,
     createdAt: at("2026-11-26T19:42:00+07:00"),
     deleteAt,
@@ -77,3 +75,35 @@ export const mockIncidents: Incident[] = [
     deleteAt,
   },
 ];
+
+// The demo ride the backend seeds too: same audio (public/demo-ride.m4a) and timings.
+export const mockTrips: Record<string, Trip> = {
+  "GR-DEMO-1": {
+    id: "GR-DEMO-1",
+    riderId: "rider1",
+    driverId: "driver1",
+    mode: "goride",
+    status: "ended",
+    consent: { rider: true, driver: true },
+    recording: {
+      path: "recordings/GR-DEMO-1.m4a",
+      contentType: ride.contentType,
+      durationSec: ride.durationSec,
+      markers: ride.markers as Marker[],
+      transcript: ride.transcript,
+      status: "uploaded",
+      review: {
+        source: "rules",
+        summary: "Perjalanan 00:30 dengan 7 kalimat terdengar. 3 kalimat ditandai, paling berat: sexual_harassment.",
+        label: "sexual_harassment",
+        confidence: 0.8,
+        moments: [
+          { at: 9.8, label: "uncomfortable", reason: "Mengandung frasa yang ditandai." },
+          { at: 18.2, label: "uncomfortable", reason: "Mengandung frasa yang ditandai." },
+          { at: 22.0, label: "sexual_harassment", reason: "Mengandung frasa yang ditandai." },
+        ],
+        note: "No AI model is connected yet. Rule-based review shown.",
+      },
+    },
+  },
+};

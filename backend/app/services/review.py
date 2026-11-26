@@ -1,8 +1,11 @@
 """Review of a whole flagged ride: summary, verified label, and the moments that back it up.
 
-Sahabat-AI (GoTo + Indosat's Indonesian LLM) does it when LLM_BASE_URL points at an
-OpenAI-compatible endpoint (vLLM, Ollama, or a hosted API). Otherwise, or if its answer is
-unusable, the keyword rules do it, and the review says so. Agents decide; this only helps.
+Tried in order, first usable answer wins:
+1. Sahabat-AI (GoTo + Indosat's Indonesian LLM), when LLM_BASE_URL points at an OpenAI-compatible
+   endpoint (vLLM, Ollama, or a hosted API).
+2. Gemini, when GEMINI_API_KEY is set (Google's OpenAI-compatible endpoint).
+3. The keyword rules, which always work; the review says why it fell back.
+Agents decide; this only helps.
 """
 
 import json
@@ -34,11 +37,21 @@ SYSTEM = (
 )
 
 
-def ask_llm(messages: list[dict]) -> str:
+def providers() -> list[dict]:
+    """The configured LLMs, best first."""
+    out = []
+    if config.LLM_BASE_URL:
+        out.append({"source": "sahabat-ai", "base": config.LLM_BASE_URL, "key": config.LLM_API_KEY, "model": config.LLM_MODEL})
+    if config.GEMINI_API_KEY:
+        out.append({"source": "gemini", "base": config.GEMINI_BASE_URL, "key": config.GEMINI_API_KEY, "model": config.GEMINI_MODEL})
+    return out
+
+
+def ask_llm(messages: list[dict], provider: dict) -> str:
     res = httpx.post(
-        f"{config.LLM_BASE_URL.rstrip('/')}/chat/completions",
-        headers={"Authorization": f"Bearer {config.LLM_API_KEY}"},
-        json={"model": config.LLM_MODEL, "messages": messages, "temperature": 0},
+        f"{provider['base'].rstrip('/')}/chat/completions",
+        headers={"Authorization": f"Bearer {provider['key']}"},
+        json={"model": provider["model"], "messages": messages, "temperature": 0},
         timeout=60,
     )
     res.raise_for_status()
@@ -54,13 +67,13 @@ def _snap(at: float, lines: list[dict]) -> float:
     return min(lines, key=lambda line: abs(line["at"] - at))["at"]
 
 
-def _by_llm(lines: list[dict], markers: list[dict]) -> dict:
+def _by_llm(lines: list[dict], markers: list[dict], provider: dict) -> dict:
     transcript = "\n".join(f"[{line['at']}] {line['text']}" for line in lines)
     flagged = "\n".join(f"[{m['at']}] phone flag: {m['kind']} {m.get('label') or ''}" for m in markers)
     raw = ask_llm([
         {"role": "system", "content": SYSTEM},
         {"role": "user", "content": f"Transcript:\n{transcript}\n\nPhone flags:\n{flagged or 'none'}"},
-    ])
+    ], provider)
     data = json.loads(raw[raw.index("{"): raw.rindex("}") + 1])  # tolerate text around the JSON
     if data["label"] not in LABELS:
         raise ValueError(f"unknown label {data['label']!r}")
@@ -70,8 +83,8 @@ def _by_llm(lines: list[dict], markers: list[dict]) -> dict:
         if m.get("label") in LABELS
     ]
     return {
-        "source": "sahabat-ai",
-        "model": config.LLM_MODEL,
+        "source": provider["source"],
+        "model": provider["model"],
         "summary": mask(str(data["summary"]))[:2000],
         "label": data["label"],
         "confidence": max(0.0, min(1.0, float(data["confidence"]))),
@@ -99,14 +112,18 @@ def review_recording(trip_id: str) -> None:
     lines = [{**line, "text": mask(line["text"])} for line in rec.get("transcript", [])]
     if not lines:
         return
-    result, note = None, None
-    if config.LLM_BASE_URL:
+    result, failed = None, []
+    for provider in providers():
         try:
-            result = _by_llm(lines, rec.get("markers", []))
+            result = _by_llm(lines, rec.get("markers", []), provider)
+            break
         except Exception as e:
-            log.exception("Sahabat-AI review failed trip=%s", trip_id)
-            note = f"Sahabat-AI could not review this ride ({type(e).__name__}); rule-based review shown."
-    else:
-        note = "Sahabat-AI is not connected yet; rule-based review shown."
-    result = result or _by_rules(lines, rec.get("durationSec", 0))
+            log.exception("%s review failed trip=%s", provider["source"], trip_id)
+            failed.append(f"{provider['source']} ({type(e).__name__})")
+    note = None
+    if failed:
+        note = "Could not review with " + ", ".join(failed) + "."
+    if not result:
+        note = (note + " " if note else "No AI model is connected yet. ") + "Rule-based review shown."
+        result = _by_rules(lines, rec.get("durationSec", 0))
     ref.update({"recording.review": {**result, "note": note, "createdAt": datetime.now(timezone.utc)}})

@@ -39,3 +39,52 @@ export interface Incident {
   createdAt: Timestamp;
   deleteAt: Timestamp;
 }
+
+export type MarkerKind = "warning" | "high" | "sos" | "manual_unsafe";
+
+/** A moment in the ride recording an agent should check (set by the phone). */
+export interface Marker {
+  at: number; // seconds from the recording start
+  kind: MarkerKind;
+  label?: Label | null;
+  score?: number | null;
+  text?: string | null;
+}
+
+/** One line of the phone's speech-to-text for the whole ride. */
+export interface Utterance {
+  at: number;
+  end?: number | null;
+  text: string;
+}
+
+/** Sahabat-AI (or Gemini, or rules) reading of the whole ride. Advice for the agent, never a verdict. */
+export interface Review {
+  source: "sahabat-ai" | "gemini" | "rules";
+  model?: string;
+  summary: string;
+  label: Label;
+  confidence: number;
+  moments: { at: number; label: Label; reason: string }[];
+  note: string | null;
+}
+
+export interface Recording {
+  path: string;
+  contentType: string;
+  durationSec: number;
+  markers: Marker[];
+  transcript: Utterance[];
+  status: "awaiting_upload" | "uploaded";
+  review?: Review;
+}
+
+export interface Trip {
+  id: string;
+  riderId: string;
+  driverId: string;
+  mode: "goride" | "gocar";
+  status: "active" | "ended";
+  consent: { rider: boolean; driver: boolean };
+  recording?: Recording;
+}

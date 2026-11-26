@@ -120,7 +120,7 @@ Classifier labels: `normal`, `uncomfortable`, `sexual_harassment`, `threat`.
 
 | App | Config |
 |---|---|
-| backend | `GCP_PROJECT`, `FIREBASE_STORAGE_BUCKET`, `LLM_BASE_URL`, `LLM_API_KEY`, `ENABLE_DEV_ROUTES`, `CHECKIN_TIMEOUT_SEC` (90) |
+| backend | `GCP_PROJECT`, `FIREBASE_STORAGE_BUCKET`, `ENABLE_DEV_ROUTES`, `CHECKIN_TIMEOUT_SEC` (90), and for the AI review `LLM_BASE_URL` / `LLM_API_KEY` / `LLM_MODEL` (Sahabat-AI) and `GEMINI_API_KEY` / `GEMINI_MODEL` (fallback) |
 | dashboard | `NEXT_PUBLIC_FIREBASE_*`, `NEXT_PUBLIC_API_URL` |
 | mobile | `google-services.json`, `API_URL` via `--dart-define`, `DEMO_MODE` |
 
@@ -162,6 +162,28 @@ Waiting on something outside the code. Build around these with stubs or seed dat
 | Backend deploy | GitHub repo variables `GCP_PROJECT`, `GCP_WIF_PROVIDER`, `GCP_DEPLOY_SA` (Workload Identity Federation) | Run locally |
 | Mobile listening service | Android SDK + a real phone (the microphone service can't run in the web preview) | Mock trip screen in `mobile/` |
 | Warning message wording | Team / pitch owner | Placeholder text |
+
+## AI review of flagged rides
+
+After a flagged ride's recording is uploaded, the backend reviews the **whole transcript** (`backend/app/services/review.py`) and stores `trips.recording.review`: a short summary in Bahasa Indonesia, a verified label with confidence, and the moments behind it, each citing a real transcript line. Phone numbers are masked before any model sees the text.
+
+| Order | Reviewer | When |
+|---|---|---|
+| 1 | Sahabat-AI | `LLM_BASE_URL` points at an OpenAI-compatible server (vLLM, Ollama, or hosted) |
+| 2 | Gemini | `GEMINI_API_KEY` is set; Google's OpenAI-compatible endpoint, `GEMINI_MODEL` (default `gemini-2.5-flash`) |
+| 3 | Rules | Always available: the keyword filter; the review's `note` says why it fell back |
+
+The review advises the agent and never decides. The dashboard shows it next to the phone's flag, says whether they agree, and reminds the agent that AI can be wrong.
+
+## Agent case page
+
+`dashboard/src/components/CaseView.tsx`, at `/incidents/{id}`. The layout follows trust-and-safety review practice: everything for one case on one page, flagged content highlighted, reviewers jump to flagged moments instead of hearing whole rides, AI claims cite clickable evidence, and a little friction before deciding.
+
+- **Header:** order ID, priority, trigger, status, time (WIB). Opening an escalated case takes it (`under_review`, assigned to the agent).
+- **Ride recording:** a timeline of the ride with colour-coded flag pins (warning amber, high red, SOS dark red, "I feel unsafe" orange) and jump buttons. Audio loads only when the agent chooses to listen, through `GET /trips/{id}/recording-url`, which is audit-logged.
+- **Transcript:** the whole ride, flagged lines in their flag colour, the current line highlighted while playing; click a line to hear it.
+- **AI review:** the reviewer (Sahabat-AI, Gemini or rules), the phone's flag next to the AI's reading and confidence, agree or differ, the summary, and "Why" moments as clickable timestamps.
+- **Decision:** contact rider, warn driver, suspend driver, or dismiss, with a note. Enabled only after the agent has played a flagged moment (or, without a recording, ticked that they read the report).
 
 ## Future work
 
