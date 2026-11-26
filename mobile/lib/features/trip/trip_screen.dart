@@ -2,9 +2,11 @@ import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
 
+import '../../engine/safe_phrase.dart';
 import '../../engine/safety_engine.dart';
 import '../../services/api.dart';
 import '../../services/recorder.dart';
+import '../../services/ride_store.dart';
 import '../../theme.dart';
 import '../safety/are_you_ok.dart';
 
@@ -17,16 +19,22 @@ class TripScreen extends StatefulWidget {
     super.key,
     required this.api,
     required this.recorder,
+    required this.store,
     required this.listen,
     required this.tripInfo,
     required this.checkins,
     this.engine,
     this.alert,
     this.clearAlert,
+    this.dial,
+    this.safePhrase,
   });
 
   final Api api;
   final TripRecorder recorder;
+
+  /// Every ride kept on the phone for 7 days: audio pieces plus markers and transcript.
+  final RideStore store;
 
   /// Finished utterances from speech-to-text. Mocked until VAD + Whisper are ready.
   final Stream<String> Function() listen;
@@ -43,12 +51,16 @@ class TripScreen extends StatefulWidget {
   final Future<void> Function({required bool loud})? alert;
   final Future<void> Function()? clearAlert;
 
+  /// Opens the phone's dialer with a number (no call is placed without the user). Null on the web.
+  final Future<void> Function(String number)? dial;
+
+  /// The rider's hands-free SOS: hearing it sends a silent SOS (no dialog, no alarm the driver
+  /// could notice). Null turns it off.
+  final SafePhrase? safePhrase;
+
   @override
   State<TripScreen> createState() => _TripScreenState();
 }
-
-/// Only a ride with a high flag or an SOS sends its full recording; anything less stays private.
-const uploadWhen = {'high', 'sos'};
 
 class _TripScreenState extends State<TripScreen> {
   String? _tripId;
@@ -57,10 +69,15 @@ class _TripScreenState extends State<TripScreen> {
   bool? _backendUp;
   bool _busy = false;
   bool _warning = false;
+  bool _sosOffline = false;
+  bool _safePhraseUsed = false;
   String? _notice;
   String? _message;
   final _heard = <(Duration, String)>[];
-  final _markers = <Marker>[];
+  RideMeta? _ride; // null when this ride isn't recorded
+  Future<void> _saving = Future.value();
+  Future<Set<String>> _uploads = Future.value({});
+  Timer? _retry;
   DateTime? _rideStart;
   Decision? _last;
   late SafetyEngine _engine;
@@ -75,12 +92,19 @@ class _TripScreenState extends State<TripScreen> {
       (up) => mounted ? setState(() => _backendUp = up) : null,
     );
     _checkinSub = widget.checkins.listen(_onCheckins);
+    // Recordings that couldn't be sent (no signal, app closed mid-ride) go out once they can.
+    _sendRecordings();
+    _retry = Timer.periodic(
+      const Duration(minutes: 1),
+      (_) => _sendRecordings(),
+    );
   }
 
   @override
   void dispose() {
     _listening?.cancel();
     _checkinSub?.cancel();
+    _retry?.cancel();
     super.dispose();
   }
 
@@ -107,13 +131,22 @@ class _TripScreenState extends State<TripScreen> {
       final trip = await widget.tripInfo(tripId);
       final both = trip != null && trip.riderConsent && trip.driverConsent;
       // Nothing is recorded unless the rider agreed now and the driver opted in beforehand.
-      final micOn = both && await widget.recorder.start();
+      final micOn = both && await widget.recorder.start(tripId);
+      if (micOn) {
+        _ride = RideMeta(
+          tripId: tripId,
+          startedAt: DateTime.now(),
+          contentType: widget.recorder.contentType,
+        );
+        await _persist();
+      }
       _engine =
           (widget.engine ??
           () => SafetyEngine(classifier: KeywordClassifier()))();
       if (micOn) _listening = widget.listen().listen(_onHeard);
       setState(() {
         _tripId = tripId;
+        _safePhraseUsed = false;
         _recording = micOn;
         _driverSafeRide = trip?.driverConsent;
         _rideStart = DateTime.now();
@@ -121,7 +154,6 @@ class _TripScreenState extends State<TripScreen> {
             ? 'Allow microphone access to record your rides.'
             : null;
         _heard.clear();
-        _markers.clear();
       });
     });
     if (mounted) setState(() => _busy = false);
@@ -132,59 +164,103 @@ class _TripScreenState extends State<TripScreen> {
     await _guard(() async {
       _listening?.cancel(); // nothing to wait for; stop hearing before the ride closes
       final tripId = _tripId!;
-      await widget.api.endTrip(tripId);
-      if (_recording) {
-        if (_markers.any((m) => uploadWhen.contains(m.kind))) {
-          // The full ride goes to the safety team, with every moment to check, then leaves the phone.
-          final rec = await widget.recorder.stop();
-          if (rec != null) {
-            await widget.api.uploadRecording(
-              tripId,
-              rec,
-              List.of(_markers),
-              List.of(_heard),
-            );
-          }
-          if (mounted) {
-            _say('Ride ended. The recording was sent to our safety team.');
-          }
-        } else {
-          await widget.recorder.discard();
-          if (mounted) {
-            _say(
-              'Ride ended. Nothing needed checking, so the recording was deleted.',
-            );
-          }
+      final ride = _ride;
+      if (ride != null) {
+        ride.durationSec = (await widget.recorder.stop()).inMilliseconds / 1000;
+        ride.ended = true;
+        await _persist();
+      }
+      // shortcut: with no signal the backend trip stays active; nothing reads that status yet.
+      await widget.api.endTrip(tripId).catchError((_) {});
+      if (ride != null) {
+        // A high or SOS ride goes to the safety team with every moment to check; the rest stays
+        // encrypted on the phone and is deleted after 7 days.
+        final sent = await _sendRecordings();
+        if (mounted) {
+          _say(
+            !ride.flagged
+                ? SafetyText.keptOnPhone
+                : sent.contains(tripId)
+                ? SafetyText.recordingSent
+                : SafetyText.recordingQueued,
+          );
         }
       }
       setState(() {
-        _tripId = _last = null;
+        _tripId = _last = _ride = null;
         _recording = _warning = false;
       });
     });
     if (mounted) setState(() => _busy = false);
   }
 
+  /// Saves the ride's details as they change, one write at a time.
+  Future<void> _persist() {
+    final ride = _ride;
+    if (ride == null) return _saving;
+    return _saving = _saving.then((_) => widget.store.save(ride));
+  }
+
+  void _mark(Marker m) {
+    _ride?.markers.add(m.toJson());
+    _persist();
+  }
+
+  /// Sends every ended high or SOS ride not sent yet, deletes rides older than 7 days, and
+  /// closes rides the app never ended (it was killed). Runs one at a time. Returns what was sent.
+  Future<Set<String>> _sendRecordings() => _uploads = _uploads.then((_) async {
+    final sent = <String>{};
+    try {
+      for (final r in await tidy(widget.store, DateTime.now())) {
+        if (!r.ended && r.tripId != _tripId) {
+          r.ended = true;
+          r.durationSec = [
+            for (final x in [...r.markers, ...r.transcript])
+              (x['at'] as num).toDouble(),
+          ].fold(r.durationSec, (a, b) => a > b ? a : b);
+          await widget.store.save(r);
+          await widget.api.endTrip(r.tripId).catchError((_) {});
+        }
+        if (!r.ended || !r.flagged || r.uploaded) continue;
+        try {
+          await widget.api.uploadRecording(
+            r,
+            await widget.store.audio(r.tripId),
+          );
+          r.uploaded = true;
+          await widget.store.save(r);
+          sent.add(r.tripId);
+        } catch (_) {
+          // No signal: the next try is in a minute, for as long as the ride is kept.
+        }
+      }
+    } catch (_) {
+      // Never break the chain: a later call must still run.
+    }
+    return sent;
+  });
+
   void _onHeard(String text) {
     final d = _engine.hear(text);
+    final at = _sinceStart;
     setState(() {
-      _heard.add((_sinceStart, text));
+      _heard.add((at, text));
       _last = d;
     });
+    _ride?.transcript.add({'at': at.inMilliseconds / 1000, 'text': text});
+    _persist();
+    if (!_safePhraseUsed && (widget.safePhrase?.heardIn(text) ?? false)) {
+      _safePhraseUsed = true;
+      _report('sos');
+    }
     switch (d.action) {
       case SafetyAction.warn:
-        _markers.add(
-          Marker(_sinceStart, 'warning', verdict: d.verdict, text: text),
-        );
+        _mark(Marker(at, 'warning', verdict: d.verdict, text: text));
         setState(() => _warning = true);
       case SafetyAction.high:
-        _markers.add(
-          Marker(_sinceStart, 'high', verdict: d.verdict, text: text),
-        );
+        _mark(Marker(at, 'high', verdict: d.verdict, text: text));
         // The flag goes to the safety team at once, as an escalated case.
-        _guard(() async {
-          await widget.api.report(_tripId!, 'auto', d);
-        });
+        _deliver('auto', d);
         _askAreYouOk(
           (ok) => ok ? _say(SafetyText.okThanks) : _report('sos'),
           loud: true,
@@ -213,13 +289,35 @@ class _TripScreenState extends State<TripScreen> {
     }
   }
 
-  Future<void> _report(String trigger) => _guard(() async {
-    _markers.add(Marker(_sinceStart, trigger, verdict: _last?.verdict));
-    await widget.api.report(_tripId!, trigger, _last);
-    if (mounted) {
+  Future<void> _report(String trigger) async {
+    _mark(Marker(_sinceStart, trigger, verdict: _last?.verdict));
+    if (await _deliver(trigger, _last) && mounted) {
       _say(trigger == 'sos' ? SafetyText.helpSent : SafetyText.reportSent);
     }
-  });
+  }
+
+  /// Keeps trying until the report reaches the safety team: no signal must never swallow an SOS.
+  /// While an SOS can't get through, the rider is offered 112.
+  // shortcut: a reply lost after the server saved the report makes a duplicate case; add an
+  // idempotency key if agents see doubles.
+  Future<bool> _deliver(String trigger, Decision? evidence) async {
+    final tripId = _tripId!;
+    for (var wait = const Duration(seconds: 5); ; wait *= 2) {
+      try {
+        await widget.api.report(tripId, trigger, evidence);
+        if (mounted && trigger == 'sos') setState(() => _sosOffline = false);
+        return true;
+      } catch (_) {
+        if (!mounted) return false;
+        if (trigger == 'sos') setState(() => _sosOffline = true);
+        // An SOS retries at least every 10 s, so it goes out soon after signal returns.
+        final most = trigger == 'sos'
+            ? const Duration(seconds: 10)
+            : const Duration(minutes: 1);
+        await Future<void>.delayed(wait > most ? most : wait);
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -250,6 +348,23 @@ class _TripScreenState extends State<TripScreen> {
             Expanded(
               child: ListView(
                 children: [
+                  if (_sosOffline)
+                    MaterialBanner(
+                      backgroundColor: GoSafeColors.highTint,
+                      leading: const Icon(Icons.signal_cellular_off),
+                      content: const Text(SafetyText.sosOffline),
+                      actions: [
+                        if (widget.dial != null)
+                          FilledButton(
+                            style: FilledButton.styleFrom(
+                              backgroundColor: GoSafeColors.high,
+                              minimumSize: const Size(0, 48),
+                            ),
+                            onPressed: () => widget.dial!('112'),
+                            child: const Text(SafetyText.call112),
+                          ),
+                      ],
+                    ),
                   if (onRide)
                     MaterialBanner(
                       leading: Icon(

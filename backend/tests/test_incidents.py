@@ -107,3 +107,28 @@ def test_auto_report_just_escalates(client, login, db):
 def test_auto_report_needs_the_phone_label(client, login, db):
     trip_id = start_trip(client, login)
     assert client.post("/incidents", json={"tripId": trip_id, "trigger": "auto", **WINDOW}).status_code == 422
+
+
+def test_sos_always_escalates_and_never_asks_the_driver(client, login, db):
+    """A silent SOS (the safe phrase) after a mild remark: a check-in would ask the driver too."""
+    trip_id = start_trip(client, login)
+    incident_id = report(
+        client, trip_id, trigger="sos",
+        deviceTranscript=[{"start": 0, "end": 3, "text": "Pak, nanti lewat jalan biasa aja ya."}],
+        deviceLabel="uncomfortable", deviceScore=0.65,
+    )
+    inc = db.document("incidents", incident_id).get().to_dict()
+    assert (inc["status"], inc["severity"]) == ("escalated", "high")
+    assert db.collection("checkins").get() == []
+
+
+def test_a_failed_sos_still_reaches_an_agent(client, login, db, monkeypatch):
+    from app.services import pipeline
+
+    def broken(*_):
+        raise RuntimeError("firestore hiccup")
+
+    monkeypatch.setattr(pipeline, "escalate", broken)
+    incident_id = report(client, start_trip(client, login), trigger="sos")
+    inc = db.document("incidents", incident_id).get().to_dict()
+    assert (inc["status"], inc["error"]) == ("escalated", "firestore hiccup")

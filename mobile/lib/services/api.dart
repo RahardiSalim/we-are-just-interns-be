@@ -1,10 +1,11 @@
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
 
 import '../engine/safety_engine.dart';
-import 'recorder.dart';
+import 'ride_store.dart';
 
 class ApiException implements Exception {
   ApiException(this.status, this.body);
@@ -102,28 +103,21 @@ class Api {
 
   /// After the ride: the full audio plus the moments an agent should check.
   /// `transcript`: everything speech-to-text heard, timed from the recording start.
-  Future<void> uploadRecording(
-    String tripId,
-    Recording rec,
-    List<Marker> markers,
-    List<(Duration, String)> transcript,
-  ) async {
+  Future<void> uploadRecording(RideMeta ride, Uint8List audio) async {
+    final tripId = ride.tripId;
     final target = await _post('/trips/$tripId/recording', {
-      'durationSec': rec.length.inMilliseconds / 1000,
-      'contentType': rec.contentType,
-      'markers': [for (final m in markers) m.toJson()],
-      'transcript': [
-        for (final (at, text) in transcript)
-          {'at': at.inMilliseconds / 1000, 'text': text},
-      ],
+      'durationSec': ride.durationSec,
+      'contentType': ride.contentType,
+      'markers': ride.markers,
+      'transcript': ride.transcript,
     });
     final put =
         http.Request(
             target['uploadMethod'] as String,
             Uri.parse(target['uploadUrl'] as String),
           )
-          ..headers['Content-Type'] = rec.contentType
-          ..bodyBytes = await rec.read();
+          ..headers['Content-Type'] = ride.contentType
+          ..bodyBytes = audio;
     final res = await _http.send(put);
     if (res.statusCode >= 300) {
       throw ApiException(res.statusCode, await res.stream.bytesToString());

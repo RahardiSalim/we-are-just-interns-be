@@ -1049,6 +1049,7 @@
           "contentType": {
             "type": "string",
             "enum": [
+              "audio/aac",
               "audio/mp4",
               "audio/ogg",
               "audio/wav"

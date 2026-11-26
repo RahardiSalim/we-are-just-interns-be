@@ -1,16 +1,22 @@
+import 'dart:io' show Directory;
+
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_fonts/google_fonts.dart';
 import 'package:material_ui/material_ui.dart';
+import 'package:path_provider/path_provider.dart';
 
+import 'engine/safe_phrase.dart';
 import 'features/safety/are_you_ok.dart' show SafetyText;
 import 'features/trip/trip_screen.dart';
 import 'services/api.dart';
 import 'services/mock_listener.dart';
+import 'services/file_ride_store.dart';
 import 'services/recorder.dart';
 import 'services/ride.dart';
+import 'services/ride_store.dart';
 import 'theme.dart';
 
 // shortcut: only the local emulators exist so far (offline project demo-gosafe). Use real
@@ -43,13 +49,22 @@ Future<void> main() async {
   // and fails after an hour. Anonymous accounts are throwaway here, so start fresh each launch.
   if (_useEmulators) await auth.signOut();
   final user = auth.currentUser ?? (await auth.signInAnonymously()).user!;
-  runApp(GoSafeApp(user: user));
+  // Rides live in the app's private folder, every file encrypted. The web preview keeps them in memory.
+  final RideStore store = kIsWeb
+      ? MemoryRideStore()
+      : FileRideStore(
+          Directory('${(await getApplicationSupportDirectory()).path}/rides'),
+          seal: Ride.seal,
+          open: Ride.open,
+        );
+  runApp(GoSafeApp(user: user, store: store));
 }
 
 class GoSafeApp extends StatelessWidget {
-  const GoSafeApp({super.key, required this.user});
+  const GoSafeApp({super.key, required this.user, required this.store});
 
   final User user;
+  final RideStore store;
 
   @override
   Widget build(BuildContext context) {
@@ -67,8 +82,20 @@ class GoSafeApp extends StatelessWidget {
       ),
       home: TripScreen(
         api: Api(token: () => user.getIdToken()),
-        recorder: MicRecorder(),
-        listen: scriptedListener,
+        recorder: MicRecorder(store),
+        store: store,
+        listen: () => scriptedListener(
+          lines: const String.fromEnvironment('DEMO_SCRIPT') == 'safe_phrase'
+              ? safePhraseConversation
+              : demoConversation,
+        ),
+        // shortcut: one phrase for everyone; let each rider pick theirs in settings later.
+        safePhrase: const SafePhrase(
+          String.fromEnvironment(
+            'SAFE_PHRASE',
+            defaultValue: 'Pak, nanti lewat jalan biasa aja ya',
+          ),
+        ),
         tripInfo: (id) async {
           final consent =
               (await db.doc('trips/$id').get()).data()?['consent'] as Map?;
@@ -94,6 +121,7 @@ class GoSafeApp extends StatelessWidget {
                 loud: loud,
               ),
         clearAlert: kIsWeb ? null : Ride.clearAlert,
+        dial: kIsWeb ? null : Ride.dial,
       ),
     );
   }

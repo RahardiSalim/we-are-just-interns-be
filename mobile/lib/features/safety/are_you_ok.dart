@@ -30,6 +30,19 @@ abstract final class SafetyText {
   static const listeningBody =
       'Listening during your ride. Recordings are only shared if something seems wrong.';
 
+  static const sosOffline =
+      "We can't reach our safety team right now. We'll keep trying. "
+      'If you are in danger, call 112.';
+  static const call112 = 'Call 112';
+
+  static const recordingSent =
+      'Ride ended. The recording was sent to our safety team.';
+  static const recordingQueued =
+      "Ride ended. We'll send the recording to our safety team as soon as you're online.";
+  static const keptOnPhone =
+      'Ride ended. Nothing needed checking. The recording stays locked on this phone '
+      "for 7 days, then it's deleted.";
+
   static const helpSent =
       "We're on it. Our safety team will contact you right away.";
   static const reportSent =

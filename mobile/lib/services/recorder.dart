@@ -1,90 +1,117 @@
-import 'dart:io' show Directory, File;
+import 'dart:async';
 import 'dart:typed_data';
 
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 
 import '../features/safety/are_you_ok.dart' show SafetyText;
 import 'ride.dart';
+import 'ride_store.dart';
 
-class Recording {
-  const Recording(this.read, this.contentType, this.length);
-  final Future<Uint8List> Function() read;
-  final String contentType; // what the backend accepts: audio/mp4 | audio/wav
-  final Duration length;
-}
-
-/// Records the whole ride from the microphone.
+/// Records the whole ride from the microphone into a [RideStore], piece by piece.
 abstract interface class TripRecorder {
-  /// False if the user denied the microphone.
-  Future<bool> start();
-  Future<Recording?> stop();
+  /// `audio/aac` on Android, `audio/wav` on the web preview.
+  String get contentType;
 
-  /// Stops and deletes the recording: the ride had nothing serious enough to share.
-  Future<void> discard();
+  /// False if the user denied the microphone.
+  Future<bool> start(String tripId);
+
+  /// Stops and saves the last piece. Returns how long it recorded.
+  Future<Duration> stop();
 }
 
 class MicRecorder implements TripRecorder {
-  final _rec = AudioRecorder();
-  DateTime? _startedAt;
+  MicRecorder(this.store);
 
-  // Browsers can't record AAC, so the web preview records WAV.
-  static const _web = kIsWeb;
+  final RideStore store;
+  final _rec = AudioRecorder();
+  static const _piece = Duration(seconds: 30);
+
+  late String _tripId;
+  DateTime? _startedAt;
+  final _buffer = BytesBuilder(copy: false);
+  var _index = 0;
+  Future<void> _writes = Future.value();
+  Timer? _timer;
+  Completer<void>? _streamDone;
 
   @override
-  Future<bool> start() async {
+  String get contentType => kIsWeb ? 'audio/wav' : 'audio/aac';
+
+  @override
+  Future<bool> start(String tripId) async {
     if (!await _rec.hasPermission()) return false;
-    var path = '';
-    if (!_web) {
-      final dir = await getApplicationSupportDirectory(); // app-private, never in backups or the gallery
-      // The last ride's encrypted file has been uploaded (or wasn't needed) by now.
-      // shortcut: a failed upload is lost here too; keep it and retry once uploads can fail in the field.
-      for (final f in Directory(dir.path).listSync().whereType<File>()) {
-        if (f.path.contains('/ride-')) f.deleteSync();
-      }
-      path = '${dir.path}/ride-${DateTime.now().millisecondsSinceEpoch}.m4a';
-      // Before the mic starts: Android only lets a foreground service keep it on in the background.
-      await Ride.startListening(
-        SafetyText.listeningTitle,
-        SafetyText.listeningBody,
+    _tripId = tripId;
+    _index = 0;
+    _startedAt = DateTime.now();
+    if (kIsWeb) {
+      // Browsers can't stream AAC: the web preview records one WAV and stores it at stop.
+      await _rec.start(
+        const RecordConfig(
+          encoder: AudioEncoder.wav,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+        path: '',
       );
+      return true;
     }
-    await _rec.start(
-      RecordConfig(
-        encoder: _web ? AudioEncoder.wav : AudioEncoder.aacLc,
+    // Before the mic starts: Android only lets a foreground service keep it on in the background.
+    await Ride.startListening(
+      SafetyText.listeningTitle,
+      SafetyText.listeningBody,
+    );
+    // A stream (not a file) gives AAC in ADTS frames, which can be cut anywhere and joined again.
+    // Each 30-second piece is encrypted and saved at once, so a crash loses at most 30 seconds.
+    final stream = await _rec.startStream(
+      const RecordConfig(
+        encoder: AudioEncoder.aacLc,
         sampleRate: 16000,
         numChannels: 1,
         bitRate: 32000,
+        // Keep recording through everything: our own alarm, a call, music, a Bluetooth headset
+        // dropping. The plugin's default pauses on each, which silenced rides at the alarm.
+        audioInterruption: AudioInterruptionMode.none,
+        audioRouteChange:
+            AudioRouteChangeMode.follow, // switch to the next mic, never stop
       ),
-      path: path,
     );
-    _startedAt = DateTime.now();
+    final done = _streamDone = Completer<void>();
+    stream.listen(_buffer.add, onDone: done.complete);
+    _timer = Timer.periodic(_piece, (_) => _savePiece());
     return true;
   }
 
-  @override
-  Future<Recording?> stop() async {
-    final path = await _rec.stop();
-    if (!_web) await Ride.stopListening();
-    if (path == null || _startedAt == null) return null;
-    // On the web `path` is a blob URL. On Android the audio is encrypted the moment recording stops.
-    // shortcut: the file is plain while the ride is on; encrypt in chunks while recording if rides get long.
-    final stored = _web ? path : await Ride.encrypt(path);
-    Future<Uint8List> read() async => _web
-        ? (await http.get(Uri.parse(path))).bodyBytes
-        : Ride.decrypt(stored);
-    return Recording(
-      read,
-      _web ? 'audio/wav' : 'audio/mp4',
-      DateTime.now().difference(_startedAt!),
-    );
+  void _savePiece() {
+    if (_buffer.isEmpty) return;
+    final bytes = _buffer.takeBytes();
+    final index = _index++;
+    _writes = _writes.then((_) => store.addPiece(_tripId, index, bytes));
   }
 
   @override
-  Future<void> discard() async {
-    await _rec.cancel(); // record's cancel() stops and deletes the file
-    if (!_web) await Ride.stopListening();
+  Future<Duration> stop() async {
+    final length = DateTime.now().difference(_startedAt ?? DateTime.now());
+    _timer?.cancel();
+    final path = await _rec.stop();
+    if (kIsWeb) {
+      if (path != null) {
+        await store.addPiece(
+          _tripId,
+          0,
+          (await http.get(Uri.parse(path))).bodyBytes,
+        );
+      }
+      return length;
+    }
+    await _streamDone?.future.timeout(
+      const Duration(seconds: 2),
+      onTimeout: () {},
+    );
+    _savePiece();
+    await _writes;
+    await Ride.stopListening();
+    return length;
   }
 }

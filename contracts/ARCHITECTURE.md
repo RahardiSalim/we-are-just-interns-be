@@ -47,7 +47,7 @@ Agreed 2026-11-26. **The mobile app is the core:** everything from speech-to-tex
 | High | `score` ≥ high threshold for `threat` / `sexual_harassment` | The flag goes to the backend **immediately** (`trigger: auto`), which escalates it as the highest priority for customer service to check. At the same moment the phone asks "Are you okay?"; "I need help" sends an SOS report. |
 | SOS / "I feel unsafe" | A person presses it, any time | Sent immediately. The buttons are always on screen and never wait for the model. |
 
-**After the ride.** If the ride had a **high flag or an SOS**, the phone uploads the **full ride recording** automatically, with time-stamped markers of every moment to check (warnings, the high flag, SOS and "I feel unsafe" presses, each with label and score). A ride with only warnings, only "I feel unsafe", or nothing at all uploads nothing: the phone deletes the recording. The backend refuses a recording without a high or SOS marker. In the cloud, recordings are deleted after 7 days unless a case is open.
+**After the ride.** If the ride had a **high flag or an SOS**, the phone uploads the **full ride recording** automatically, with time-stamped markers of every moment to check (warnings, the high flag, SOS and "I feel unsafe" presses, each with label and score). A ride with only warnings, only "I feel unsafe", or nothing at all uploads nothing: it stays encrypted on the phone and is deleted after 7 days. With no signal, the upload waits on the phone and is retried until it goes through (within those 7 days). The backend refuses a recording without a high or SOS marker. In the cloud, recordings are deleted after 7 days unless a case is open.
 
 **Rules.**
 - **Motorbike drivers:** a GoRide driver can't tap while riding, so the driver's silence never counts as "no reply" on a backend check-in. The rider's answer decides.
@@ -192,7 +192,7 @@ The review advises the agent and never decides. The dashboard shows it next to t
 
 ## Decisions (where the two source docs disagreed)
 
-- **Severity rules for button reports** (`backend/app/services/pipeline.py`): `threat` or `sexual_harassment` → high (escalate). No label at all and trigger `sos` → high. Everything else → medium (check-in). A person pressed the button, so the backend never dismisses these. Automatic reports only arrive at "high", so `dismissed` stays unused for now.
+- **Severity rules for button reports** (`backend/app/services/pipeline.py`): Trigger `sos` (button, "I need help" or the safe phrase) → always high (escalate): a check-in would also ask the driver and give away a silent SOS. `threat` or `sexual_harassment` → high. Everything else → medium (check-in). If processing fails, an `sos` or `auto` case is still set to `escalated` (with `error`) so it reaches the agent queue. A person pressed the button, so the backend never dismisses these. Automatic reports only arrive at "high", so `dismissed` stays unused for now.
 - **Classifier until IndoBERT lands:** an Indonesian keyword filter (`app/services/classify.py`). A `deviceLabel` from the phone always wins; the filter still marks `flagged` lines.
 - **Summary until Sahabat-AI is hosted:** a template from the masked flagged lines (phone numbers masked; names not yet).
 - **Retention:** 7 days by default, 30 days while a case is escalated, back to 7 days once closed.

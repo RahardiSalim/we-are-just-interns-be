@@ -31,17 +31,15 @@ object Vault {
         }.generateKey()
     }
 
-    /** Encrypts the file to `<path>.enc`, deletes the plain one, returns the new path. */
-    fun encrypt(path: String): String {
-        val plain = File(path)
-        val out = File("$path.enc")
+    /** Writes `bytes` encrypted to `path` (via a temp file, so a crash never leaves half a file). */
+    fun seal(path: String, bytes: ByteArray) {
         val c = Cipher.getInstance("AES/GCM/NoPadding").apply { init(Cipher.ENCRYPT_MODE, key()) }
-        out.outputStream().use { it.write(c.iv); it.write(c.doFinal(plain.readBytes())) }
-        plain.delete()
-        return out.path
+        val tmp = File("$path.tmp")
+        tmp.outputStream().use { it.write(c.iv); it.write(c.doFinal(bytes)) }
+        tmp.renameTo(File(path))
     }
 
-    fun decrypt(path: String): ByteArray {
+    fun open(path: String): ByteArray {
         val b = File(path).readBytes()
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         c.init(Cipher.DECRYPT_MODE, key(), GCMParameterSpec(128, b, 0, IV))
