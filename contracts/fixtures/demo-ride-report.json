@@ -1,0 +1,53 @@
+{
+  "durationSec": 23.6,
+  "transcript": [
+    {
+      "at": 1.0,
+      "end": 4.6,
+      "text": "Selamat malam Mbak, sesuai aplikasi ke Kemang ya."
+    },
+    {
+      "at": 5.8,
+      "end": 7.1,
+      "text": "Iya Pak, betul."
+    },
+    {
+      "at": 8.3,
+      "end": 11.4,
+      "text": "Mbak tinggal di mana? Sendirian ya di rumah?"
+    },
+    {
+      "at": 12.6,
+      "end": 15.0,
+      "text": "Maaf Pak, saya lagi telepon."
+    },
+    {
+      "at": 16.2,
+      "end": 18.9,
+      "text": "Nanti saya mampir ya, kita ngobrol."
+    },
+    {
+      "at": 20.1,
+      "end": 22.4,
+      "text": "Pak, tolong fokus nyetir saja."
+    }
+  ],
+  "_note": "Demo ride: macOS 'say' voice Damayanti, one line at a time with pauses, so the times are exact. WAV 16 kHz mono.",
+  "contentType": "audio/wav",
+  "markers": [
+    {
+      "at": 8.3,
+      "kind": "warning",
+      "label": "uncomfortable",
+      "score": 0.63,
+      "text": "Mbak tinggal di mana? Sendirian ya di rumah?"
+    },
+    {
+      "at": 16.2,
+      "kind": "manual_unsafe",
+      "label": "uncomfortable",
+      "score": 0.63,
+      "text": "Nanti saya mampir ya, kita ngobrol."
+    }
+  ]
+}

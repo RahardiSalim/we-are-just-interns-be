@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useState } from "react";
 import { CaseView } from "@/components/CaseView";
-import { MOCK, mockIncidents, mockTrips } from "@/lib/mock";
+import { MOCK, mockIncidents, mockPeople, mockTrips } from "@/lib/mock";
 
 // Loaded only in live mode, so Firebase never initialises without config.
 const LiveCase = dynamic(() => import("@/components/LiveCase"), { ssr: false });
@@ -22,7 +22,8 @@ function MockCase({ id }: { id: string }) {
     <CaseView
       incident={{ ...found, status }}
       trip={mockTrips[found.tripId] ?? null}
-      loadAudio={async () => "/demo-ride.m4a"}
+      people={mockPeople}
+      loadAudio={async () => "/demo-ride.wav"}
       onDecide={async () => setStatus("closed")}
     />
   );

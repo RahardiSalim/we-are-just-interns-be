@@ -36,13 +36,19 @@ export interface Incident {
   /** A phone is streaming this ride to the agent right now (emergency). */
   live?: boolean;
   /** Every report that joined this case: one case per ride, from either phone. */
-  reports?: { trigger: Incident["trigger"]; by: string; label: Label | null; score: number | null }[];
+  reports?: { trigger: Incident["trigger"]; by: string; label: Label | null; score: number | null; at?: Timestamp }[];
   assignedAgent: string | null;
   createdAt: Timestamp;
   deleteAt: Timestamp;
 }
 
 export type MarkerKind = "warning" | "high" | "sos" | "manual_unsafe";
+
+/** The parts of users/{uid} the case page shows, so the agent can call the rider or driver. */
+export interface Person {
+  displayName: string;
+  phone?: string | null;
+}
 
 /** A moment in the ride recording an agent should check (set by the phone). */
 export interface Marker {

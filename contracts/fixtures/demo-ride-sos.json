@@ -1,0 +1,65 @@
+{
+  "durationSec": 31.8,
+  "transcript": [
+    {
+      "at": 1.0,
+      "end": 4.6,
+      "text": "Pak, sesuai aplikasi ya, ke Stasiun Sudirman."
+    },
+    {
+      "at": 5.8,
+      "end": 9.7,
+      "text": "Iya Mas. Saya lewat jalan tikus aja biar cepat."
+    },
+    {
+      "at": 10.9,
+      "end": 14.3,
+      "text": "Pak, ini kok makin jauh dari rute di aplikasi?"
+    },
+    {
+      "at": 15.5,
+      "end": 18.2,
+      "text": "Udah diem aja, jangan banyak tanya."
+    },
+    {
+      "at": 19.4,
+      "end": 22.7,
+      "text": "Pak, tolong berhenti di depan, saya mau turun."
+    },
+    {
+      "at": 23.9,
+      "end": 27.3,
+      "text": "Kalau kamu lapor-lapor, saya tahu rumah kamu."
+    },
+    {
+      "at": 28.5,
+      "end": 30.6,
+      "text": "Tolong berhenti sekarang, Pak!"
+    }
+  ],
+  "_note": "Demo SOS ride: macOS 'say' voice Damayanti, one line at a time with pauses, so the times are exact. WAV 16 kHz mono.",
+  "contentType": "audio/wav",
+  "markers": [
+    {
+      "at": 15.5,
+      "kind": "warning",
+      "label": "uncomfortable",
+      "score": 0.66,
+      "text": "Udah diem aja, jangan banyak tanya."
+    },
+    {
+      "at": 23.9,
+      "kind": "high",
+      "label": "threat",
+      "score": 0.88,
+      "text": "Kalau kamu lapor-lapor, saya tahu rumah kamu."
+    },
+    {
+      "at": 28.5,
+      "kind": "sos",
+      "label": null,
+      "score": null,
+      "text": "Tolong berhenti sekarang, Pak!"
+    }
+  ]
+}

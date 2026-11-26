@@ -121,8 +121,13 @@ def finalize(incident_id: str, background: BackgroundTasks, user: dict = Depends
 
 
 class Decision(BaseModel):
-    action: Literal["dismiss", "warn_driver", "suspend_driver", "contact_rider"]
-    note: str = Field("", max_length=2000)
+    """A decision for the customer OR the driver (or both); a side left out means no action for that person.
+    Both "none" dismisses the case: the customer is told nothing needs further action and the driver hears nothing.
+    Each note is the safety team's message in that person's email."""
+    customer: Literal["contact", "none"] = "none"
+    driver: Literal["contact", "warn", "suspend", "none"] = "none"
+    customerNote: str = Field("", max_length=2000)
+    driverNote: str = Field("", max_length=2000)
 
 
 def audit(agent_id: str, incident_id: str, action: str) -> None:
@@ -178,5 +183,5 @@ def decide(incident_id: str, body: Decision, background: BackgroundTasks, agent:
 
     close(db().transaction())
     audit(agent["uid"], incident_id, "decide")
-    background.add_task(mailer.decision, incident_id, body.action)  # after the response, so SMTP never slows the agent
+    background.add_task(mailer.decision, incident_id, body.customer, body.driver, body.customerNote, body.driverNote)  # after the response, so SMTP never slows the agent
     return {"status": "closed"}

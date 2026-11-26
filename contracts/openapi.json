@@ -857,28 +857,42 @@
       },
       "Decision": {
         "properties": {
-          "action": {
+          "customer": {
             "type": "string",
             "enum": [
-              "dismiss",
-              "warn_driver",
-              "suspend_driver",
-              "contact_rider"
+              "contact",
+              "none"
             ],
-            "title": "Action"
+            "title": "Customer",
+            "default": "none"
           },
-          "note": {
+          "driver": {
+            "type": "string",
+            "enum": [
+              "contact",
+              "warn",
+              "suspend",
+              "none"
+            ],
+            "title": "Driver",
+            "default": "none"
+          },
+          "customerNote": {
             "type": "string",
             "maxLength": 2000,
-            "title": "Note",
+            "title": "Customernote",
+            "default": ""
+          },
+          "driverNote": {
+            "type": "string",
+            "maxLength": 2000,
+            "title": "Drivernote",
             "default": ""
           }
         },
         "type": "object",
-        "required": [
-          "action"
-        ],
-        "title": "Decision"
+        "title": "Decision",
+        "description": "A decision for the customer OR the driver (or both); a side left out means no action for that person.\nBoth \"none\" dismisses the case: the customer is told nothing needs further action and the driver hears nothing.\nEach note is the safety team's message in that person's email."
       },
       "EventBatch": {
         "properties": {

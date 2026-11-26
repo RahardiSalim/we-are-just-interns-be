@@ -13,7 +13,7 @@ export function IncidentQueue() {
   useEffect(() => {
     const q = query(
       collection(db, "incidents"),
-      where("status", "in", ["escalated", "under_review"]),
+      where("status", "in", ["escalated", "under_review", "closed"]), // shortcut: no limit on closed history; page it when it grows
       orderBy("createdAt", "desc"),
     );
     return onSnapshot(
@@ -23,7 +23,8 @@ export function IncidentQueue() {
     );
   }, []);
 
-  if (error) return <p role="alert" className="text-high">Could not load incidents: {error}</p>;
-  if (!incidents) return <p className="text-muted">Loading…</p>;
+  const box = "rounded-card border border-line bg-canvas p-5 text-body-small shadow-low";
+  if (error) return <p role="alert" className={`${box} text-high`}>Could not load cases: {error}</p>;
+  if (!incidents) return <p className={`${box} text-muted`}>Loading cases…</p>;
   return <IncidentList incidents={incidents} />;
 }

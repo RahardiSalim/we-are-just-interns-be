@@ -37,8 +37,8 @@
       "text": "Pak, saya mau turun di depan aja."
     }
   ],
-  "_note": "Demo ride: macOS 'say' voice Damayanti reading the mobile app's scripted conversation. Times are seconds from the start of demo-ride.m4a.",
-  "contentType": "audio/mp4",
+  "_note": "Demo ride: macOS 'say' voice Damayanti reading the mobile app's scripted conversation. Times are seconds from the start of demo-ride.wav. WAV (16 kHz mono) so every browser can play it, including editor preview browsers without AAC.",
+  "contentType": "audio/wav",
   "markers": [
     {
       "at": 9.8,

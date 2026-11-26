@@ -20,7 +20,7 @@ Cost: Cloud Run free tier covers a 2 GiB instance for roughly 62 h/month if it s
 - Mobile app and dashboard **read** Firestore live, **write** through FastAPI.
 - The app uploads audio straight to Cloud Storage using a signed URL from FastAPI.
 - FCM is not used yet: during a ride the phone's own foreground service raises every alert.
-- Email (plain SMTP): whoever presses SOS gets a "ticket created, being processed" email; after a decision, the rider (and the driver when warned or suspended) is told what the safety team decided.
+- Email (plain SMTP): whoever presses SOS gets a "ticket created, being processed" email; after a decision, the rider (and the driver when contacted, warned or suspended) is told what the safety team decided, with the agent's message when there is one. Tickets are numbered `GS-XXXX-XXXX` (from the incident ID) in emails and on the dashboard.
 - Neither client ever holds admin credentials.
 
 ## On-device listening (mobile)
@@ -100,7 +100,7 @@ Every endpoint takes `Authorization: Bearer <Firebase ID token>`; the backend ch
 | `POST /incidents/{id}/finalize` | App | Clip uploaded; returns 202 and starts processing |
 | `POST /incidents/{id}/open` | Dashboard (agent) | Takes an `escalated` ticket: `under_review`, `assignedAgent` = caller |
 | `GET /incidents/{id}/clip-url` | Dashboard (agent) | Short-lived signed read URL; writes an audit log |
-| `POST /incidents/{id}/decision` | Dashboard (agent) | `dismiss` \| `warn_driver` \| `suspend_driver` \| `contact_rider` + note |
+| `POST /incidents/{id}/decision` | Dashboard (agent) | `customer` (`contact` \| `none`) **or** `driver` (`contact` \| `warn` \| `suspend` \| `none`): either side may be left out (it means `none`); both `none` dismisses. Optional `customerNote` / `driverNote` (sent in that person's email) |
 | `POST /dev/seed`, `POST /dev/reset` | Team only | Loads users, trips, sample incidents. Disabled when `ENABLE_DEV_ROUTES` is off |
 
 ## Incident lifecycle
@@ -188,13 +188,15 @@ The review advises the agent and never decides. The dashboard shows it next to t
 
 ## Agent case page
 
-`dashboard/src/components/CaseView.tsx`, at `/incidents/{id}`. The layout follows trust-and-safety review practice: everything for one case on one page, flagged content highlighted, reviewers jump to flagged moments instead of hearing whole rides, AI claims cite clickable evidence, and a little friction before deciding.
+`dashboard/src/components/CaseView.tsx`, at `/incidents/{id}`. Desktop layout: recording and transcript on the left; the AI review, then the rider's and the driver's phone cards on the right (both columns end level); below them the decision across the full width, customer and driver as two separate blocks side by side. "Record decision" says what is still missing when it is off. The layout follows trust-and-safety review practice: everything for one case on one page, flagged content highlighted, reviewers jump to flagged moments instead of hearing whole rides, AI claims cite clickable evidence, and a little friction before deciding.
 
-- **Header:** order ID, priority, trigger, status, time (WIB). Opening an escalated case takes it (`under_review`, assigned to the agent).
-- **Ride recording:** a timeline of the ride with colour-coded flag pins (warning amber, high red, SOS dark red, "I feel unsafe" orange) and jump buttons. Audio loads only when the agent chooses to listen, through `GET /trips/{id}/recording-url`, which is audit-logged.
-- **Transcript:** the whole ride, flagged lines in their flag colour, the current line highlighted while playing; click a line to hear it.
+- **Queue** (`/`): Open and Closed tabs, search by ticket number or Order ID, and filters for priority, source (auto-detected, SOS, "I feel unsafe") and status. Priority comes from how the ticket was raised: SOS and auto-detected are **High**, "I feel unsafe" is **Warning** (the backend's `severity` is unchanged).
+- **Header:** ticket number (`GS-XXXX-XXXX`, the incident ID without punctuation, first 8 characters; the same in emails), order ID, priority, trigger, status, time (WIB), and how the ticket was raised: automatically (`trigger: auto`, "the rider's/driver's phone flagged this ride") or by a person (SOS, which also emails them a ticket confirmation, or "I feel unsafe"). Opening an escalated case takes it (`under_review`, assigned to the agent).
+- **Ride recording:** a waveform of the ride: played part green, unplayed grey, each flagged moment in its flag colour (warning amber, high red, SOS dark red, "I feel unsafe" orange) with a pin and a jump button. Click or use the arrow keys to seek; the bars at the playhead move while it plays. The waveform is decoded in the browser (Web Audio), so it appears only after the agent loads the audio. Audio loads only when the agent chooses to listen, through `GET /trips/{id}/recording-url`, which is audit-logged.
+- **Transcript:** the whole ride, flagged lines in their flag colour; click a line to hear it. While audio plays the current line bounces once, fills a progress bar, and stays scrolled into view; lines already heard are muted.
+- **Phone reports:** a card each for the rider's and the driver's phone: their name and phone number (`users.phone`, a `tel:` link so the agent can call), then the tickets that phone raised on this ride. Both phones listen, and every report joins the ride's one case, so the cards split `incident.reports` by who made each one (`by` against the trip's `riderId` / `driverId`), or say "No report from this phone on this ride".
 - **AI review:** the reviewer (Sahabat-AI, Gemini or rules), the phone's flag next to the AI's reading and confidence, agree or differ, the summary, and "Why" moments as clickable timestamps.
-- **Decision:** contact rider, warn driver, suspend driver, or dismiss, with a note. Enabled only after the agent has played a flagged moment (or, without a recording, ticked that they read the report).
+- **Decision:** one choice for the customer (contact, or no action) **or** the driver (contact, warn, suspend, or no action), or both: the same for tickets a person raised (SOS, report) and automatic ones. A side left open means no action for that person; nothing chosen for either is a **dismiss**: the customer is told nothing needs further action and the driver gets nothing. Each side has an optional message that goes into that person's email. The rider always gets an email: "we'll contact you" if contacted, else "action taken" for a warning or suspension, else "following up" when the driver is contacted, else "no further action". The driver gets one for any driver decision except no action ("contact" says plainly it is not a warning). With a message the email is the short template plus "A message from the safety team"; without one it is the full template. Enabled only after the agent has played a flagged moment (or, without a recording, ticked that they read the report).
 
 ## Future work
 

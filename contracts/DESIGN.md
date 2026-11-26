@@ -17,7 +17,7 @@ Each value says where it comes from:
 
 **Brand book.** Gojek's archetype is *the Magician*: it makes the complex appear simple. Its slogan is *Pasti Ada Jalan* ("There's always a way"). For GoSafe, that means one clear next step on every screen.
 
-**Motion (Asphalt):** candid, contextual, playful. In a safety product, keep it calm: motion only explains a change, never decorates. Keep it to 150–250 ms ease-out, and turn it off when the device asks for reduced motion.
+**Motion (Asphalt):** candid, contextual, playful. In a safety product, keep it calm: motion only explains a change, never decorates. Keep it to 150–250 ms ease-out, and turn it off when the device asks for reduced motion. Two exceptions, both to show where playback is and both off under reduced motion: the waveform bars at the playhead pulse while audio plays, and the transcript line that starts playing bounces once (450 ms), gets a green progress bar, and scrolls into view inside the transcript list; lines already heard turn muted.
 
 ## Colour
 
@@ -89,7 +89,7 @@ Maison Neue is a paid font, so until we have a licence both apps use **Plus Jaka
 |---|---|---|---|
 | `title-hero` | 44 / 56 | Bold | Big numbers (rare) |
 | `title-large` | 34 / 44 | Bold | Mobile home headline |
-| `title-medium` | 26 / 36 | Bold | Page titles ("Order GR-DEMO-1") |
+| `title-medium` | 26 / 36 | Bold | Page titles ("Order RB-182730459") |
 | `title-small` | 20 / 28 | Demi | Card and section titles |
 | `title-tiny` | 16 / 20 | Demi | Labels, list titles, buttons |
 | `body-moderate` | 16 / 24 | Book | Body text, messages (1.5×) |
@@ -129,13 +129,21 @@ Asphalt's components: Alert, Badge, Bottom Navbar, Button, Card, Coachmark, Divi
 | Component | Rule |
 |---|---|
 | **Button** | Pill. Height 48 on mobile, 40 on the dashboard (56 for the mobile Start ride and 64 for SOS). Primary: `brand-strong` fill, white `title-tiny` text. Secondary: outlined with `line`, `fg` text. SOS: `sos` fill. Destructive: `danger`. One primary button per view. |
+| **Button variants (Asphalt reference screenshot, 2026-11-26)** | Every button is a **pill**. Three styles, each in positive (green) and destructive (red): **Filled** (solid fill, white text), **Outline** (white with a 1px coloured border and coloured text), **Tint** (light tint fill, coloured text, no border). Two sizes: **Regular** (full width, tall) and **Tiny** (short pill that hugs its text). Optional **left or right icon** (a check in a circle); **loading** replaces the label with a spinner in the label's colour; **inactive** is grey in every style (filled `#BBBBBB` with white text, outline grey border with `#6A6A6A` text, tint `#EEEEEE` with `#A9A9A9` text). Also: **swipe action** (filled or outline, a round handle with `»` on the left), **contextual action** (filled, two-line title + description on the left, an amount and an arrow-in-circle on the right) and **circular buttons** (primary: green circle with a white arrow; secondary: white circle with a dark arrow). Colours measured from the screenshot pixels, so roughly: positive green `#3B8628`, tint `#EEFEED`, destructive red `#D82E2D`, destructive tint `#FEF8F8`. Our tokens stay as they are (`brand-strong` `#008A10`, `danger` `#D22730`) until someone checks these against the Figma file. |
+| **Email pictures** | Under the email header: the **Gojek support illustration** (an agent with a headset, hands together in apology, on a yellow shape with gear and code doodles; supplied by the team, `art-support.jpg`) for emails to people who reported something, where we sound sorry and caring; an **Asphalt icon tile** (filled rounded icon on a white rounded square with a soft coloured shadow) for the rest: shield (no further action), chat (contact driver), alert (warning, `warn`), lock (suspension, `high`). Images in `backend/app/assets/` (icons PNG, the illustration JPEG to keep emails light), attached inline. |
 | **Alert** | Warnings and status messages. Light tint of the meaning colour, `fg` text, an icon at the start. Shown at the **top**, never over the bottom buttons. |
 | **Toast** | Not used: a toast at the bottom would cover SOS. Use an Alert at the top instead. |
 | **Card** | `canvas` with a 1px `line` border, `radius-card`; `shadow-low` only when it floats. Padding 16 (mobile), 20 (dashboard). |
 | **Badge** | Priority, trigger and flag kind. `radius-chip`, Demi weight, a meaning colour with its tint or solid. |
-| **Selection control** | Radios for the agent's decision, as full-width cards that turn `brand-tint` when picked. |
+| **Selection control** | Radios for the agent's decision, as cards that turn `brand-tint` when picked. Clicking the picked card again clears it ("Click again to clear" shows next to the group title), so an agent can leave the customer or the driver side without a decision. |
 | **Input field** | `radius-chip`, 1px `line` border, `brand` focus ring. |
 | **Marker** | Flag pins on the ride timeline, in the meaning colours. |
+| **Side nav** (dashboard) | Dark (`ink`) column on desktop with the shield, "GoSafe" and the "Open cases" item (green bar marks the active item); a top bar on small screens. From GoCorp's web dashboard. |
+| **Page hero** (dashboard) | `brand-strong` header with a `radius-sheet` curved bottom, white title (`title-medium`) and subtitle; the first cards overlap it. From the GoTransit app. `components/PageHero.tsx` |
+| **Status pill** | Rounded pill with a coloured dot: "Waiting for an agent" (brand), "In review" (warn), "Closed" (muted). From GoCorp's "● Active". `components/StatusPill.tsx` |
+| **Filter pill and search** (dashboard queue) | Asphalt "Tiny" buttons as filters: off is outline (`line` border, `muted` text), on is tint (`brand-tint`, `brand-deep` text). Search is a pill input with a magnifier. Open/Closed is a segmented control on `surface`. |
+| **Bottom pattern** (dashboard) | Three soft curved waves fixed along the bottom, behind the content: `brand-tint`, then `brand` at 7% and 10%. Decoration only (`aria-hidden`). From GoTransit's background curves. |
+| **Waveform** | The ride recording as rounded bars on `surface`: unplayed `muted` at 35%, played `brand` (filled smoothly up to the playhead, every frame), flagged moments in their meaning colour. Hover shows the time; click or arrow keys seek. `components/RecordingPlayer.tsx` |
 
 ## Logo
 
