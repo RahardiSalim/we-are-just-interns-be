@@ -13,10 +13,10 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="id" className={`${jakarta.variable} h-full antialiased`}>
+    <html lang="id" data-auth={process.env.NEXT_PUBLIC_FIREBASE_API_KEY ? "out" : "in"} className={`${jakarta.variable} h-full antialiased`}>
       <body className="min-h-full font-sans text-body-moderate lg:flex">
-        {/* Dark side nav on desktop (GoCorp style), a top bar on small screens. */}
-        <aside className="bg-ink text-white lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:shrink-0">
+        {/* Dark side nav on desktop (GoCorp style), a top bar on small screens. Hidden until an agent signs in (globals.css). */}
+        <aside className="app-nav bg-ink text-white lg:sticky lg:top-0 lg:h-screen lg:w-60 lg:shrink-0">
           <div className="flex h-14 items-center gap-2 px-6 lg:h-16">
             <Link href="/" className="flex items-center gap-2">
               <svg aria-hidden viewBox="0 0 24 24" className="size-6 fill-brand">
@@ -40,7 +40,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           aria-hidden
           viewBox="0 0 1440 200"
           preserveAspectRatio="none"
-          className="pointer-events-none fixed right-0 bottom-0 -z-10 h-40 w-full lg:h-52 lg:w-[calc(100%-15rem)]"
+          className="app-curves pointer-events-none fixed right-0 bottom-0 -z-10 h-40 w-full lg:h-52 lg:w-[calc(100%-15rem)]"
         >
           <path d="M0 120C240 60 480 60 720 110s480 70 720 0v90H0Z" className="fill-brand-tint" />
           <path d="M0 160c300-50 560-40 820 0s420 30 620-20v60H0Z" className="fill-brand/[0.07]" />
