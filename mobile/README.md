@@ -71,7 +71,7 @@ Each ride has a **share level** that only goes up: **local → at end → live**
 | Any time | SOS button, or a shout for help | Live | An SOS, and Live |
 | Any time | The safe phrase | Live | A high flag (`auto`) at once, **silently** (no question, no alarm), and Live at once. It counts on the high ladder: as the 3rd high flag it is an SOS |
 
-**Live** means: at once, every audio piece so far, the transcript and the flags; then a new 10-second piece and the new lines every 10 seconds until the ride ends. The case is marked **LIVE** at the top of the agents' queue, and the agent can listen while the ride goes on.
+**Live** means: at once, every audio piece so far, the transcript and the flags; then a new 10-second piece and the new lines every 10 seconds until the ride ends. The case is marked **LIVE** at the top of the agents' queue, and the agent can listen while the ride goes on. LIVE goes off once every phone that was streaming has ended its ride, on every case of that ride, including one the agent already closed.
 
 **A high flag nobody answers** (quiet first, so the phone doesn't give the user away):
 
