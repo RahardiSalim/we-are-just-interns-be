@@ -21,9 +21,17 @@ import 'services/ride.dart';
 import 'services/ride_store.dart';
 import 'theme.dart';
 
-// shortcut: only the local emulators exist so far (offline project demo-gosafe). Use real
-// FirebaseOptions (flutterfire configure) and USE_EMULATORS=false once the Firebase project exists.
+// Defaults are the offline emulator project (demo-gosafe). For a real Firebase project pass
+// USE_EMULATORS=false and FIREBASE_API_KEY / FIREBASE_APP_ID / FIREBASE_PROJECT_ID / FIREBASE_SENDER_ID
+// (Firebase console > Project settings > Your apps > the Android app). These are public client
+// settings, not secrets.
 const _useEmulators = bool.fromEnvironment('USE_EMULATORS', defaultValue: true);
+const _firebaseOptions = FirebaseOptions(
+  apiKey: String.fromEnvironment('FIREBASE_API_KEY', defaultValue: 'demo-key'),
+  appId: String.fromEnvironment('FIREBASE_APP_ID', defaultValue: '1:1:android:1'),
+  messagingSenderId: String.fromEnvironment('FIREBASE_SENDER_ID', defaultValue: '1'),
+  projectId: String.fromEnvironment('FIREBASE_PROJECT_ID', defaultValue: 'demo-gosafe'),
+);
 // 10.0.2.2 is this Mac as seen from the Android emulator.
 const _emulatorHost = String.fromEnvironment('EMULATOR_HOST');
 const _devMlUrl = String.fromEnvironment('DEV_ML');
@@ -31,14 +39,7 @@ final _devMl = _devMlUrl.isEmpty ? null : DevClassifier(Uri.parse(_devMlUrl));
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await Firebase.initializeApp(
-    options: const FirebaseOptions(
-      apiKey: 'demo-key',
-      appId: '1:1:android:1',
-      messagingSenderId: '1',
-      projectId: 'demo-gosafe',
-    ),
-  );
+  await Firebase.initializeApp(options: _firebaseOptions);
   final auth = FirebaseAuth.instance;
   if (_useEmulators) {
     final host = _emulatorHost.isNotEmpty
