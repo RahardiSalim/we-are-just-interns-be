@@ -21,3 +21,6 @@
 /logs/
 /convo_out/
 /datasets/
+
+# Eval recordings: people's voices, never committed
+/eval/recordings/
