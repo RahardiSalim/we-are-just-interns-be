@@ -141,6 +141,7 @@ class _TripScreenState extends State<TripScreen> {
   bool _sosOffline = false;
   bool _safePhraseUsed = false;
   late SafePhrase? _phrase = widget.safePhrase; // the user's own once loaded
+  String? _email; // where the safety team writes to, once loaded
   bool _shout = false; // the alarm rings: listening for "tolong"
   bool _live = false;
   String? _notice;
@@ -176,6 +177,9 @@ class _TripScreenState extends State<TripScreen> {
     );
     widget.store.safePhrase().then((saved) {
       if (saved != null && mounted) setState(() => _phrase = SafePhrase(saved));
+    });
+    widget.store.email().then((saved) {
+      if (saved != null && mounted) setState(() => _email = saved);
     });
     // Recordings that couldn't be sent (no signal, app closed mid-ride) go out once they can.
     _sendRecordings();
@@ -229,6 +233,7 @@ class _TripScreenState extends State<TripScreen> {
       } else {
         tripId = await widget.api.startTrip(riderConsent: consent);
       }
+      unawaited(_shareEmail());
       final trip = await widget.tripInfo(tripId);
       final both = trip != null && trip.riderConsent && trip.driverConsent;
       // Nothing is recorded unless the rider agreed and the driver has Safe Ride on.
@@ -506,6 +511,73 @@ class _TripScreenState extends State<TripScreen> {
     } else {
       _say(SafetyText.helpSent);
     }
+  }
+
+  /// The account is anonymous (and fresh on each launch with the emulators), so the email goes to the
+  /// backend with every ride. Never blocks the ride; a failure only means no email this time.
+  Future<void> _shareEmail() async {
+    final email = _email ?? await widget.store.email();
+    if (email == null) return;
+    try {
+      await widget.api.setEmail(email);
+    } catch (_) {}
+  }
+
+  Future<void> _editEmail() async {
+    final saved = await askEmail(context, _email ?? '');
+    if (saved == null || !mounted) return;
+    await widget.store.setEmail(saved);
+    setState(() => _email = saved);
+    _say(SafetyText.emailSaved);
+    unawaited(_shareEmail());
+  }
+
+  /// A setting row (the email) in the same look as the safe phrase card above or below it.
+  Widget _settingCard({
+    required IconData icon,
+    required String title,
+    required String? value,
+    required VoidCallback onPressed,
+    required bool onRide,
+  }) {
+    final text = Theme.of(context).textTheme;
+    final color = onRide ? GoSafeColors.ride : GoSafeColors.brandDeep;
+    return GoCard(
+      padding: onRide
+          ? const EdgeInsets.fromLTRB(16, 12, 12, 12)
+          : const EdgeInsets.all(16),
+      child: Row(
+        spacing: 12,
+        children: [
+          CircleIcon(icon, size: onRide ? 32 : 40),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(title, style: text.titleSmall),
+                Text(
+                  value ?? 'Not set',
+                  style: text.bodySmall?.copyWith(color: GoSafeColors.muted),
+                ),
+              ],
+            ),
+          ),
+          OutlinedButton(
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(0, 36),
+              padding: const EdgeInsets.symmetric(horizontal: 16),
+              side: BorderSide(
+                color: onRide ? GoSafeColors.ride : GoSafeColors.brandStrong,
+                width: onRide ? 1.5 : 1,
+              ),
+              foregroundColor: color,
+            ),
+            onPressed: onPressed,
+            child: Text(value == null ? 'Set' : 'Change'),
+          ),
+        ],
+      ),
+    );
   }
 
   Future<void> _editSafePhrase() async {
@@ -788,6 +860,13 @@ class _TripScreenState extends State<TripScreen> {
                         ),
                       ],
                     ),
+                  ),
+                  _settingCard(
+                    icon: Icons.mail_outline_rounded,
+                    title: SafetyText.emailTitle,
+                    value: _email,
+                    onPressed: _editEmail,
+                    onRide: false,
                   ),
                   if (_driver)
                     GoCard(
@@ -1197,6 +1276,14 @@ class _TripScreenState extends State<TripScreen> {
                 ),
               ],
             ),
+          ),
+        if (widget.autoStart)
+          _settingCard(
+            icon: Icons.mail_outline_rounded,
+            title: SafetyText.emailTitle,
+            value: _email,
+            onPressed: _editEmail,
+            onRide: true,
           ),
         // What was heard is for the safety team, not the rider. Shown only in the developer mode
         // (DEV_ML), to check the classifier.
