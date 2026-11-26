@@ -672,7 +672,8 @@
             "type": "string",
             "enum": [
               "sos",
-              "manual_unsafe"
+              "manual_unsafe",
+              "auto"
             ],
             "title": "Trigger"
           },

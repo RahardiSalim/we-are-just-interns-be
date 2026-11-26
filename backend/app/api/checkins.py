@@ -41,7 +41,7 @@ def reply(checkin_id: str, body: Reply, user: dict = Depends(current_user)) -> d
         if body.answer == "need_help":
             tx.update(inc_ref, {"status": "escalated"})
             return "escalated"
-        if all(c.get("status") == "ok" for c in others):
+        if all(c.get("status") == "ok" for c in others if c.get("required")):
             tx.update(inc_ref, {"status": "resolved_ok"})
             return "resolved_ok"
         return inc_status

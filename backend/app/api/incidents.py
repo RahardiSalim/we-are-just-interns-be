@@ -3,7 +3,7 @@ from typing import Literal
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException
 from google.cloud import firestore
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.api.trips import participant_trip
 from app.core.auth import current_user, require_role
@@ -24,12 +24,18 @@ class TranscriptLine(BaseModel):
 
 class CreateIncident(BaseModel):
     tripId: str
-    trigger: Literal["sos", "manual_unsafe"]
+    trigger: Literal["sos", "manual_unsafe", "auto"]  # auto: the phone's classifier hit the high threshold
     windowStart: datetime
     windowEnd: datetime
     deviceTranscript: list[TranscriptLine] | None = Field(None, max_length=500)
     deviceLabel: Label | None = None
     deviceScore: float | None = Field(None, ge=0, le=1)
+
+    @model_validator(mode="after")
+    def auto_needs_the_phone_verdict(self):
+        if self.trigger == "auto" and (self.deviceLabel is None or self.deviceScore is None):
+            raise ValueError("trigger auto needs deviceLabel and deviceScore")
+        return self
 
 
 @router.post("")

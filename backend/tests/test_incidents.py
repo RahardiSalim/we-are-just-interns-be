@@ -11,9 +11,9 @@ HARASSMENT = [
 ]
 
 
-def start_trip(client, login) -> str:
+def start_trip(client, login, mode="goride") -> str:
     login("rider1")
-    return client.post("/trips", json={"orderId": "GR-2001"}).json()["tripId"]
+    return client.post("/trips", json={"orderId": "GR-2001", "mode": mode}).json()["tripId"]
 
 
 def report(client, trip_id, trigger="sos", **extra) -> str:
@@ -87,3 +87,20 @@ def test_strangers_cannot_report_on_a_trip(client, login, db):
     trip_id = start_trip(client, login)
     login("rider2")
     assert client.post("/incidents", json={"tripId": trip_id, "trigger": "sos", **WINDOW}).status_code == 403
+
+
+def test_auto_report_just_escalates(client, login, db):
+    trip_id = start_trip(client, login)
+    incident_id = report(
+        client, trip_id, trigger="auto", deviceLabel="sexual_harassment", deviceScore=0.93,
+        deviceTranscript=[{"start": 0, "end": 4, "text": "Cantik banget, mampir ke tempat saya ya."}],
+    )
+    inc = db.document("incidents", incident_id).get().to_dict()
+    assert (inc["status"], inc["severity"], inc["label"]) == ("escalated", "high", "sexual_harassment")
+    assert inc["summary"]
+    assert db.collection("checkins").get() == [], "the phones ask \"Are you OK?\" themselves"
+
+
+def test_auto_report_needs_the_phone_label(client, login, db):
+    trip_id = start_trip(client, login)
+    assert client.post("/incidents", json={"tripId": trip_id, "trigger": "auto", **WINDOW}).status_code == 422

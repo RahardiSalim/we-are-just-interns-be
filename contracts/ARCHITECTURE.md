@@ -24,7 +24,7 @@ Cost: Cloud Run free tier covers a 2 GiB instance for roughly 62 h/month if it s
 
 ## On-device listening (mobile)
 
-Agreed 2026-11-26. The phone listens and judges; the backend only hears about it when a person reports or the model is confident something is wrong.
+Agreed 2026-11-26. **The mobile app is the core:** everything from speech-to-text to flagging and responding runs on the phone. The backend only receives reports, escalates them, and serves the agent dashboard.
 
 **Who records.** Rider and driver both consent at trip start, and **both phones** record for the whole trip. Recording on both means the victim's copy survives if the other person deletes the app. Without both consents nothing is recorded.
 
@@ -43,7 +43,7 @@ Agreed 2026-11-26. The phone listens and judges; the backend only hears about it
 | Level | When | What happens |
 |---|---|---|
 | Warning | `score` ≥ warning threshold | A neutral message on **both** phones: the conversation seems off, tell us if you're uncomfortable, please keep it respectful. Plus a Report button. At most once per trip or once every 10 minutes. Logged as a trip event; no incident. |
-| High | `score` ≥ high threshold for `threat` / `sexual_harassment` | At the same moment: an "Are you OK?" check-in to both, **and** an incident with `trigger: auto` plus the flagged clip goes to customer service. A "need help" answer raises the case's priority. |
+| High | `score` ≥ high threshold for `threat` / `sexual_harassment` | At the same moment: the phone shows "Are you OK?" itself (both phones run their own engine, so both people see it), **and** sends an incident with `trigger: auto` plus the flagged clip, which the backend escalates to customer service. "Need help" on that prompt sends an SOS report. |
 | SOS / "I feel unsafe" | A person presses it, any time | Unchanged. The buttons are always on screen and never wait for the model. |
 
 **Rules.**
@@ -77,9 +77,9 @@ Every endpoint takes `Authorization: Bearer <Firebase ID token>`; the backend ch
 | `POST /trips` | App (rider) | Body: `orderId` (the GoJek order ID, which becomes the `tripId`), `mode`. Assigns the demo driver; 409 if the order already has a trip |
 | `POST /trips/{id}/events` | App | Batch of SOS / manual-unsafe events with a timestamp. No location fields |
 | `POST /trips/{id}/end` | App | Ends the trip |
-| `POST /incidents` | App | Body: `tripId`, `trigger`, window start/end, optional `deviceTranscript`, `deviceLabel`, `deviceScore`. Returns `incidentId` + signed upload URL (10 min) |
+| `POST /incidents` | App | Body: `tripId`, `trigger` (`sos` \| `manual_unsafe` \| `auto`), window start/end, `deviceTranscript`, `deviceLabel`, `deviceScore` (`auto` requires label + score and always escalates). Returns `incidentId`, signed upload URL (10 min), `uploadMethod` |
 | `POST /incidents/{id}/finalize` | App | Clip uploaded; returns 202 and starts processing |
-| `POST /checkins/{id}/reply` | App | `ok` or `need_help` |
+| `POST /checkins/{id}/reply` | App | `ok` or `need_help`, for the check-in after an "I feel unsafe" press. On GoRide only the rider's answer is required: the driver's silence never escalates, but the driver's `need_help` does |
 | `POST /incidents/{id}/open` | Dashboard (agent) | Takes an `escalated` ticket: `under_review`, `assignedAgent` = caller |
 | `GET /incidents/{id}/clip-url` | Dashboard (agent) | Short-lived signed read URL; writes an audit log |
 | `POST /incidents/{id}/decision` | Dashboard (agent) | `dismiss` \| `warn_driver` \| `suspend_driver` \| `contact_rider` + note |
@@ -89,9 +89,7 @@ Every endpoint takes `Authorization: Bearer <Firebase ID token>`; the backend ch
 
 | Change | Caller | Does |
 |---|---|---|
-| `POST /incidents` accepts `trigger: auto` | App | Requires `deviceLabel` + `deviceScore`. Escalates at once *and* sends the check-in to both, without changing `status` to `checkin_pending` |
 | `POST /trips/{id}/events` accepts `type: warning` | App | Logs a warning with `data: {label, score}`. No incident |
-| `POST /checkins/{id}/reply` on GoRide | App | The driver's no-reply is ignored: rider `ok` resolves, rider `need_help` or rider no-reply escalates |
 | `POST /incidents/{id}/request-audio` | Dashboard (agent) | Creates one `audioRequests` doc per phone and pushes `{type: audio_request}` to both. Writes an audit log |
 | `POST /audio-requests/{id}/upload-url` | App | Signed upload URL + `uploadMethod` for that trip's audio from this phone |
 | `POST /audio-requests/{id}/done` | App | Marks the upload complete; the dashboard shows the clips |
@@ -106,7 +104,7 @@ Only the backend changes `status`.
 | `processing` | Finalize | device transcript + label (keyword filter if the phone sent no label) → severity → `dismissed`, `checkin_pending` or `escalated` |
 | `dismissed` | Severity low | Logged, deleted at `deleteAt` |
 | `checkin_pending` | Severity medium; FCM push + `checkins` doc to rider and driver | `resolved_ok` if both reply ok; `escalated` on `need_help` or no reply in 90 s |
-| `escalated` | Severity high, failed check-in, or `trigger: auto` (planned; the check-in to both runs alongside); timeline + LLM summary built | `under_review` when an agent opens it |
+| `escalated` | Severity high, failed check-in, or `trigger: auto`; summary built | `under_review` when an agent opens it |
 | `under_review` | Agent calls `POST /incidents/{id}/open` | `closed` after a decision |
 | `closed` | Decision recorded | Driver may appeal (stretch) |
 

@@ -19,8 +19,8 @@ def status(db, incident_id) -> str:
     return db.document("incidents", incident_id).get().get("status")
 
 
-def test_both_say_ok_resolves_the_case(client, login, db):
-    incident_id = report(client, start_trip(client, login), trigger="manual_unsafe")
+def test_gocar_needs_both_to_say_ok(client, login, db):
+    incident_id = report(client, start_trip(client, login, mode="gocar"), trigger="manual_unsafe")
     ids = checkins(db, incident_id)
 
     assert client.post(f"/checkins/{ids['rider1']}/reply", json={"answer": "ok"}).status_code == 200
@@ -58,3 +58,24 @@ def test_only_the_owner_answers_once(client, login, db):
     assert client.post(f"/checkins/{ids['driver1']}/reply", json={"answer": "ok"}).status_code == 403
     assert client.post(f"/checkins/{ids['rider1']}/reply", json={"answer": "ok"}).status_code == 200
     assert client.post(f"/checkins/{ids['rider1']}/reply", json={"answer": "need_help"}).status_code == 409
+
+
+def test_goride_rider_ok_is_enough_because_the_driver_is_riding(client, login, db):
+    incident_id = report(client, start_trip(client, login, mode="goride"), trigger="manual_unsafe")
+    client.post(f"/checkins/{checkins(db, incident_id)['rider1']}/reply", json={"answer": "ok"})
+    assert status(db, incident_id) == "resolved_ok"
+
+
+def test_goride_driver_silence_alone_does_not_escalate(client, login, db, monkeypatch):
+    monkeypatch.setattr(config, "CHECKIN_TIMEOUT_SEC", 0.3)
+    incident_id = report(client, start_trip(client, login, mode="goride"), trigger="manual_unsafe")
+    # the driver never answers; the rider answers late, after the timer, so the timer decides
+    time.sleep(0.8)
+    assert status(db, incident_id) == "escalated", "the rider's silence still escalates"
+
+
+def test_driver_need_help_still_counts_on_goride(client, login, db):
+    incident_id = report(client, start_trip(client, login, mode="goride"), trigger="manual_unsafe")
+    login("driver1")
+    client.post(f"/checkins/{checkins(db, incident_id)['driver1']}/reply", json={"answer": "need_help"})
+    assert status(db, incident_id) == "escalated"

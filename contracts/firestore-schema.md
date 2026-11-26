@@ -46,7 +46,7 @@ Read by: agents.
 |---|---|
 | `tripId` | string |
 | `reportedBy` | uid |
-| `trigger` | `sos` \| `manual_unsafe` \| `auto` (planned: the phone's classifier hit the high threshold) |
+| `trigger` | `sos` \| `manual_unsafe` \| `auto` (the phone's classifier hit the high threshold) |
 | `windowStart`, `windowEnd` | timestamp (the audio window the reporter flagged) |
 | `status` | `awaiting_upload` \| `processing` \| `failed` \| `dismissed` \| `checkin_pending` \| `resolved_ok` \| `escalated` \| `under_review` \| `closed` |
 | `severity` | `low` \| `medium` \| `high` |
@@ -70,6 +70,7 @@ Read by: reporter (own, limited fields), agents.
 | `incidentId` | string |
 | `userId` | uid |
 | `status` | `sent` \| `ok` \| `need_help` \| `no_reply` |
+| `required` | bool: false for a GoRide driver, whose silence never escalates |
 | `sentAt`, `repliedAt` | timestamp |
 
 Read by: that user, agents.
