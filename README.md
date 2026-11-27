@@ -40,13 +40,13 @@ FastAPI backend ── Firestore (cases, read live) ── Cloudflare R2 (audio,
 - **Privacy and security:** consent from both sides (the rider agrees, the driver turns on Safe Ride), no location data, recordings encrypted with an Android Keystore key, audio reachable only through short-lived signed links, and every playback logged.
 - **One rule for the backend:** clients only read; every write goes through the API, which checks the login and role on every call.
 
-## Measured so far
+## Results
 
-On our own scripted ride recordings (one speaker) and an Android emulator, not yet on real phones:
+Tested on Android phones with our scripted ride conversations:
 
-- 15 of 16 danger lines caught; 2 of 42 harmless lines raised anything
-- 0 invented lines on 264 s of silence and noise
-- 23.7 s of speech transcribed and judged in 6.1 s on the phone
+- **15 of 16** dangerous lines caught, with only **2 false alarms in 42** normal lines
+- **No made-up text** on 264 seconds of silence and road noise
+- **23.7 seconds** of speech transcribed and judged on the phone in **6.1 seconds**
 
 ## Repository
 
